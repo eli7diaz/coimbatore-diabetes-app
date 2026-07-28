@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { Shield, Lock, Twitter, Github, Linkedin, Mail } from "lucide-react";
+import { useLanguage } from "@/components/i18n/LanguageContext";
 
 export default function Footer() {
+    const { t } = useLanguage();
     return (
         <footer className="bg-white border-t border-gray-100 pt-16 pb-8">
             <div className="container mx-auto px-4">
@@ -14,7 +16,7 @@ export default function Footer() {
                             <span className="text-xl font-bold tracking-tight text-gray-900 leading-none">India<br /><span className="text-[12px] text-primary uppercase font-black tracking-widest">Care</span></span>
                         </Link>
                         <p className="text-sm text-muted-foreground font-medium leading-relaxed mb-6">
-                            Empowering the people of India with AI-driven metabolic precision and world-class clinical support.
+                            {t("footer.tagline")}
                         </p>
                         <div className="flex gap-4">
                             <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 transition-all"><Twitter size={18} /></a>
@@ -24,45 +26,45 @@ export default function Footer() {
                     </div>
 
                     <div>
-                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">Platform</h4>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">{t("footer.platform")}</h4>
                         <ul className="space-y-4">
-                            <li><Link href="/landing" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">How it Works</Link></li>
-                            <li><Link href="/" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Dashboard</Link></li>
-                            <li><Link href="/provider/dashboard" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Clinical Portal</Link></li>
+                            <li><Link href="/landing" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.howItWorks")}</Link></li>
+                            <li><Link href="/" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.dashboard")}</Link></li>
+                            <li><Link href="/provider/dashboard" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.clinicalPortal")}</Link></li>
                         </ul>
                     </div>
 
                     <div>
-                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">Access</h4>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">{t("footer.access")}</h4>
                         <ul className="space-y-4">
-                            <li><Link href="/auth/login" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Sign In</Link></li>
-                            <li><Link href="/auth/patient/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Patient Register</Link></li>
-                            <li><Link href="/auth/provider/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Provider Register</Link></li>
+                            <li><Link href="/auth/login" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.signIn")}</Link></li>
+                            <li><Link href="/auth/patient/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.patientRegister")}</Link></li>
+                            <li><Link href="/auth/provider/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.providerRegister")}</Link></li>
                         </ul>
                     </div>
 
                     <div>
-                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">Legal</h4>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">{t("footer.legal")}</h4>
                         <ul className="space-y-4">
-                            <li><Link href="/legal/privacy" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Privacy Policy</Link></li>
-                            <li><Link href="/legal/terms" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">Terms of Service</Link></li>
-                            <li><Link href="/legal/dpdpa" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">DPDPA Compliance</Link></li>
+                            <li><Link href="/legal/privacy" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.privacyPolicy")}</Link></li>
+                            <li><Link href="/legal/terms" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.termsOfService")}</Link></li>
+                            <li><Link href="/legal/dpdpa" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.dpdpaCompliance")}</Link></li>
                         </ul>
                     </div>
                 </div>
 
                 <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-6">
                     <p className="text-xs font-bold text-gray-400 italic flex items-center gap-2">
-                        © 2026 India GPT-Diabetes Network. Precision Vibe Guaranteed.
+                        {t("footer.copyright")}
                     </p>
                     <div className="flex items-center gap-8">
                         <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-gray-400">
                             <Shield size={14} className="text-primary" />
-                            HIPAA SECURE
+                            {t("footer.hipaaSecure")}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-gray-400">
                             <Lock size={14} className="text-primary" />
-                            DPDPA ENCRYPTED
+                            {t("footer.dpdpaEncrypted")}
                         </div>
                     </div>
                 </div>

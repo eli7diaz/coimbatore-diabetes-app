@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { Bell, Clock, Settings, Volume2, Save, CheckCircle2 } from "lucide-react";
+import { useLanguage } from "@/components/i18n/LanguageContext";
 
 export default function ReminderSettings() {
+    const { t } = useLanguage();
     const [reminders, setReminders] = useState([
-        { id: 1, label: "Fasting Glucose", time: "07:30", active: true, freq: "Daily" },
-        { id: 2, label: "Post-Breakfast Check", time: "10:00", active: true, freq: "Daily" },
-        { id: 3, label: "Weekly HbA1c Log", time: "09:00", active: false, freq: "Weekly" },
+        { id: 1, labelKey: "reminders.fastingGlucose", time: "07:30", active: true, freqKey: "reminders.daily" },
+        { id: 2, labelKey: "reminders.postBreakfast", time: "10:00", active: true, freqKey: "reminders.daily" },
+        { id: 3, labelKey: "reminders.weeklyHba1c", time: "09:00", active: false, freqKey: "reminders.weekly" },
     ]);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -31,8 +33,8 @@ export default function ReminderSettings() {
         <div className="premium-card p-6">
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h3 className="text-xl font-bold">Alarm & Reminders</h3>
-                    <p className="text-sm text-muted-foreground">Adjust frequency and alert types</p>
+                    <h3 className="text-xl font-bold">{t("reminders.title")}</h3>
+                    <p className="text-sm text-muted-foreground">{t("reminders.subtitle")}</p>
                 </div>
                 <Settings size={20} className="text-muted-foreground" />
             </div>
@@ -45,8 +47,8 @@ export default function ReminderSettings() {
                                 <Bell size={18} />
                             </div>
                             <div>
-                                <p className="text-sm font-bold">{rem.label}</p>
-                                <p className="text-xs text-muted-foreground">{rem.time} • {rem.freq}</p>
+                                <p className="text-sm font-bold">{t(rem.labelKey)}</p>
+                                <p className="text-xs text-muted-foreground">{rem.time} • {t(rem.freqKey)}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
@@ -62,11 +64,11 @@ export default function ReminderSettings() {
             </div>
 
             <div className="space-y-4">
-                <label className="text-sm font-bold block">Smart Notification Frequency</label>
+                <label className="text-sm font-bold block">{t("reminders.smartFrequency")}</label>
                 <select className="w-full bg-white border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-                    <option>Critical Only (Low/High)</option>
-                    <option>Balanced (Hourly Trends)</option>
-                    <option>Continuous (Full CGM Feed)</option>
+                    <option>{t("reminders.freqCritical")}</option>
+                    <option>{t("reminders.freqBalanced")}</option>
+                    <option>{t("reminders.freqContinuous")}</option>
                 </select>
                 <button
                     onClick={handleSave}
@@ -79,12 +81,12 @@ export default function ReminderSettings() {
                     ) : saved ? (
                         <>
                             <CheckCircle2 size={18} />
-                            Preferences Saved
+                            {t("reminders.preferencesSaved")}
                         </>
                     ) : (
                         <>
                             <Save size={18} />
-                            Save Preferences
+                            {t("reminders.savePreferences")}
                         </>
                     )}
                 </button>

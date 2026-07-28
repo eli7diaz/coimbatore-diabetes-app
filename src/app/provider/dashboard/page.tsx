@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Calendar, Users, BarChart3, Newspaper, Bell, UserCheck, Clock, MapPin, TrendingUp, MoreHorizontal } from "lucide-react";
+import { Search, Calendar, Users, BarChart3, Newspaper, Bell, UserCheck, Clock, MapPin, TrendingUp } from "lucide-react";
 import MetricCard from "@/components/dashboard/MetricCard";
 import AIAssistant from "@/components/ai/AIAssistant";
 import { useLanguage } from "@/components/i18n/LanguageContext";
 import VisitModal from "@/components/provider/VisitModal";
 import StaffModal from "@/components/provider/StaffModal";
 import AnalyticsModal from "@/components/provider/AnalyticsModal";
+import CalendarModal from "@/components/provider/CalendarModal";
+import ArticleModal from "@/components/provider/ArticleModal";
 
 export default function ProviderDashboard() {
     const router = useRouter();
@@ -17,6 +19,9 @@ export default function ProviderDashboard() {
     const [selectedVisit, setSelectedVisit] = useState<any>(null);
     const [showStaff, setShowStaff] = useState(false);
     const [showAnalytics, setShowAnalytics] = useState(false);
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [selectedArticle, setSelectedArticle] = useState<{ title: string; date: string; category: string } | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         // Simulated simple auth check
@@ -38,6 +43,14 @@ export default function ProviderDashboard() {
         { title: "Fiber-rich Diet for South Indian Meals", date: "Feb 10", category: "Nutrition" },
     ];
 
+    const query = searchQuery.trim().toLowerCase();
+    const filteredVisits = query
+        ? todayVisits.filter(v => v.name.toLowerCase().includes(query) || v.type.toLowerCase().includes(query))
+        : todayVisits;
+    const filteredArticles = query
+        ? articles.filter(a => a.title.toLowerCase().includes(query) || a.category.toLowerCase().includes(query))
+        : articles;
+
     return (
         <div className="flex flex-col gap-8 pb-20">
             {/* Modals */}
@@ -50,6 +63,12 @@ export default function ProviderDashboard() {
             {showAnalytics && (
                 <AnalyticsModal onClose={() => setShowAnalytics(false)} />
             )}
+            {showCalendar && (
+                <CalendarModal onClose={() => setShowCalendar(false)} />
+            )}
+            {selectedArticle && (
+                <ArticleModal article={selectedArticle} onClose={() => setSelectedArticle(null)} />
+            )}
 
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -61,7 +80,9 @@ export default function ProviderDashboard() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <input
                         type="text"
-                        placeholder={`${t("common.search")}...`}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={`${t("common.search")} patients, visit types, articles...`}
                         className="w-full pl-12 pr-4 py-3 rounded-2xl bg-white border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium text-sm"
                     />
                 </div>
@@ -85,10 +106,18 @@ export default function ProviderDashboard() {
                                 <Clock className="text-primary" size={20} />
                                 {t("provider.queueTitle")}
                             </h2>
-                            <button className="text-sm font-bold text-primary">View Calendar</button>
+                            <button
+                                onClick={() => setShowCalendar(true)}
+                                className="text-sm font-bold text-primary hover:underline"
+                            >
+                                View Calendar
+                            </button>
                         </div>
                         <div className="space-y-4">
-                            {todayVisits.map((visit, i) => (
+                            {filteredVisits.length === 0 && (
+                                <p className="text-sm text-center text-muted-foreground font-medium py-6">No visits match "{searchQuery}".</p>
+                            )}
+                            {filteredVisits.map((visit, i) => (
                                 <div
                                     key={i}
                                     onClick={() => setSelectedVisit(visit)}
@@ -133,14 +162,10 @@ export default function ProviderDashboard() {
                                 Full Analysis
                             </button>
                         </div>
-                        <div
-                            onClick={() => setShowAnalytics(true)}
-                            className="h-[200px] w-full bg-gray-50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
+                        <div className="h-[200px] w-full bg-gray-50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-200">
                             <div className="text-center">
                                 <BarChart3 className="text-primary/20 mx-auto mb-2" size={48} />
                                 <span className="text-muted-foreground font-bold text-sm block">Aggregated Population Trends Visualization</span>
-                                <span className="text-[10px] text-primary font-bold">Click to view deep insights</span>
                             </div>
                         </div>
                     </div>
@@ -154,15 +179,25 @@ export default function ProviderDashboard() {
                             {t("provider.knowledgeTitle")}
                         </h3>
                         <div className="space-y-4 text-left">
-                            {articles.map((article, i) => (
-                                <div key={i} className="pb-4 border-b border-white/10 last:border-none last:pb-0 hover:translate-x-1 transition-transform cursor-pointer">
+                            {filteredArticles.length === 0 && (
+                                <p className="text-xs text-white/60 font-medium">No articles match "{searchQuery}".</p>
+                            )}
+                            {filteredArticles.map((article, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setSelectedArticle(article)}
+                                    className="w-full text-left pb-4 border-b border-white/10 last:border-none last:pb-0 hover:translate-x-1 transition-transform cursor-pointer"
+                                >
                                     <span className="text-[10px] uppercase font-bold tracking-widest text-white/60 mb-1 block">{article.category}</span>
                                     <h4 className="text-sm font-bold leading-tight">{article.title}</h4>
                                     <span className="text-[10px] text-white/50 mt-2 block">{article.date}</span>
-                                </div>
+                                </button>
                             ))}
                         </div>
-                        <button className="w-full mt-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold transition-colors">
+                        <button
+                            onClick={() => setSelectedArticle(articles[0])}
+                            className="w-full mt-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold transition-colors"
+                        >
                             Explore Academy
                         </button>
                     </div>

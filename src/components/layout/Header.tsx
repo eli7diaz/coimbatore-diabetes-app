@@ -51,7 +51,7 @@ export default function Header() {
                         </>
                     ) : (
                         <>
-                            <Link href="/landing" className="hover:text-primary transition-colors text-gray-600">{t("landing.heroSubtitle") ? "Home" : "Home"}</Link>
+                            <Link href="/landing" className="hover:text-primary transition-colors text-gray-600">{t("common.home")}</Link>
                             <Link href="/auth/register" className="hover:text-primary transition-colors text-gray-600">{t("common.joinNetwork")}</Link>
                         </>
                     )}
@@ -65,13 +65,15 @@ export default function Header() {
                             <Link href="/auth/register" className="text-xs font-black text-primary hover:scale-105 transition-transform bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">{t("common.getStarted")}</Link>
                         </div>
                     ) : (
-                        <LogoutButton />
+                        <>
+                            <LogoutButton />
+                            <Link href={auth.role === "provider" ? "/provider/dashboard" : "/"}>
+                                <button className="rounded-full bg-secondary px-4 py-2 text-sm font-medium hover:bg-secondary/80 transition-colors">
+                                    {t("common.memberPortal")}
+                                </button>
+                            </Link>
+                        </>
                     )}
-                    <Link href={auth.isAuth ? (auth.role === "provider" ? "/provider/dashboard" : "/") : "/auth/login"}>
-                        <button className="rounded-full bg-secondary px-4 py-2 text-sm font-medium hover:bg-secondary/80 transition-colors">
-                            {t("common.memberPortal")}
-                        </button>
-                    </Link>
                 </div>
             </div>
         </header>

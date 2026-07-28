@@ -13,10 +13,10 @@ export default function LoginPage() {
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        // Simulate auth
-        localStorage.setItem("auth", "true");
-        window.dispatchEvent(new Event("auth-change"));
+        // Simulate auth verification, then grant access only once it "completes"
         setTimeout(() => {
+            localStorage.setItem("auth", "true");
+            window.dispatchEvent(new Event("auth-change"));
             router.push("/");
         }, 1500);
     };

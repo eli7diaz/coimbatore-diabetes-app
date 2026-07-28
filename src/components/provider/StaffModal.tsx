@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Users, UserPlus, Shield, MoreVertical, Smartphone, Trash2, Check, Plus } from "lucide-react";
+import { X, Users, UserPlus, Shield, MoreVertical, Smartphone, Trash2, Plus, IdCard, RefreshCw, BarChart3, Clock3 } from "lucide-react";
 
 interface StaffModalProps {
     onClose: () => void;
@@ -18,6 +18,18 @@ export default function StaffModal({ onClose }: StaffModalProps) {
     const [isAdding, setIsAdding] = useState(false);
     const [newName, setNewName] = useState("");
     const [newRole, setNewRole] = useState("Nurse");
+    const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+    const [showShiftAnalytics, setShowShiftAnalytics] = useState(false);
+
+    const statusCycle = ["On Duty", "Break", "Offline"] as const;
+    const handleCycleStatus = (id: number) => {
+        setStaff(staff.map(member => {
+            if (member.id !== id) return member;
+            const nextIndex = (statusCycle.indexOf(member.status as typeof statusCycle[number]) + 1) % statusCycle.length;
+            return { ...member, status: statusCycle[nextIndex] };
+        }));
+        setOpenMenuId(null);
+    };
 
     const handleAddStaff = () => {
         if (!newName.trim()) return;
@@ -152,9 +164,32 @@ export default function StaffModal({ onClose }: StaffModalProps) {
                                         >
                                             <Trash2 size={16} />
                                         </button>
-                                        <button className="p-1.5 text-muted-foreground hover:text-gray-900 rounded-lg">
-                                            <MoreVertical size={16} />
-                                        </button>
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setOpenMenuId(openMenuId === member.id ? null : member.id)}
+                                                className="p-1.5 text-muted-foreground hover:text-gray-900 rounded-lg"
+                                            >
+                                                <MoreVertical size={16} />
+                                            </button>
+                                            {openMenuId === member.id && (
+                                                <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-xl z-10 py-1.5 animate-in fade-in zoom-in-95 duration-150">
+                                                    <button
+                                                        onClick={() => setOpenMenuId(null)}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                                                    >
+                                                        <IdCard size={14} />
+                                                        View Profile
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleCycleStatus(member.id)}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                                                    >
+                                                        <RefreshCw size={14} />
+                                                        Change Status
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))
@@ -179,10 +214,34 @@ export default function StaffModal({ onClose }: StaffModalProps) {
                     </div>
                 </div>
 
-                <div className="p-6 border-t bg-gray-50 flex-shrink-0">
-                    <button className="w-full py-3 font-bold text-gray-600 hover:text-gray-900 transition-colors">
-                        View Shift Analytics & Logs
-                    </button>
+                <div className="border-t bg-gray-50 flex-shrink-0">
+                    {showShiftAnalytics && (
+                        <div className="p-6 pb-0 grid grid-cols-3 gap-3 animate-in slide-in-from-bottom-2 duration-200">
+                            <div className="p-3 rounded-xl bg-white border text-center">
+                                <Clock3 className="mx-auto text-primary mb-1" size={16} />
+                                <p className="text-lg font-black text-gray-900">38.5h</p>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Avg Shift/Week</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white border text-center">
+                                <BarChart3 className="mx-auto text-primary mb-1" size={16} />
+                                <p className="text-lg font-black text-gray-900">96%</p>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Coverage Rate</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white border text-center">
+                                <Users className="mx-auto text-primary mb-1" size={16} />
+                                <p className="text-lg font-black text-gray-900">{staff.reduce((sum, m) => sum + m.patients, 0)}</p>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Patients Covered</p>
+                            </div>
+                        </div>
+                    )}
+                    <div className="p-6">
+                        <button
+                            onClick={() => setShowShiftAnalytics(!showShiftAnalytics)}
+                            className="w-full py-3 font-bold text-gray-600 hover:text-gray-900 transition-colors"
+                        >
+                            {showShiftAnalytics ? "Hide Shift Analytics & Logs" : "View Shift Analytics & Logs"}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

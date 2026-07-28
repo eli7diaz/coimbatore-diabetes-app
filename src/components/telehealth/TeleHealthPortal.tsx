@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, Video, FileText, User, Share2, ShieldCheck, Search, X, Mic, MicOff, Camera, CameraOff, PhoneOff } from "lucide-react";
+import { MessageSquare, Video, FileText, User, Share2, ShieldCheck, Search, Mic, MicOff, Camera, CameraOff, PhoneOff, Send } from "lucide-react";
+import { useLanguage } from "@/components/i18n/LanguageContext";
+
+interface ChatMessage {
+    role: "doctor" | "patient";
+    content: string;
+}
 
 export default function TeleHealthPortal() {
+    const { t } = useLanguage();
     const [sharing, setSharing] = useState(true);
     const [trendReports, setTrendReports] = useState(true);
     const [remoteAccess, setRemoteAccess] = useState(true);
@@ -11,6 +18,18 @@ export default function TeleHealthPortal() {
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
     const localVideoRef = useRef<HTMLVideoElement>(null);
+    const [showMessages, setShowMessages] = useState(false);
+    const [messages, setMessages] = useState<ChatMessage[]>([
+        { role: "doctor", content: t("telehealth.initialDoctorMessage") },
+    ]);
+    const [messageInput, setMessageInput] = useState("");
+
+    const handleSendMessage = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!messageInput.trim()) return;
+        setMessages((prev) => [...prev, { role: "patient", content: messageInput.trim() }]);
+        setMessageInput("");
+    };
 
     const startCall = async () => {
         setIsCalling(true);
@@ -48,8 +67,8 @@ export default function TeleHealthPortal() {
                             <User size={48} className="text-gray-400" />
                         </div>
                         <div className="text-center">
-                            <h3 className="text-xl font-bold text-white">Dr. Savitri Venkat</h3>
-                            <p className="text-sm text-primary font-bold">Connecting Securely...</p>
+                            <h3 className="text-xl font-bold text-white">{t("telehealth.doctorName")}</h3>
+                            <p className="text-sm text-primary font-bold">{t("telehealth.connecting")}</p>
                         </div>
                     </div>
                 </div>
@@ -104,8 +123,8 @@ export default function TeleHealthPortal() {
                             <User size={24} />
                         </div>
                         <div>
-                            <h3 className="text-lg font-bold">Dr. Savitri Venkat</h3>
-                            <p className="text-xs text-white/70">Endocrinologist • India Medical Center</p>
+                            <h3 className="text-lg font-bold">{t("telehealth.doctorName")}</h3>
+                            <p className="text-xs text-white/70">{t("telehealth.doctorRole")}</p>
                         </div>
                     </div>
                     <div className="flex gap-2">
@@ -115,22 +134,53 @@ export default function TeleHealthPortal() {
                         >
                             <Video size={18} />
                         </button>
-                        <button className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+                        <button
+                            onClick={() => setShowMessages(!showMessages)}
+                            className={`p-2 rounded-lg transition-colors ${showMessages ? "bg-white text-primary" : "bg-white/10 hover:bg-white/20"}`}
+                        >
                             <MessageSquare size={18} />
                         </button>
                     </div>
                 </div>
                 <div className="flex items-center gap-4 bg-white/10 rounded-xl p-3 border border-white/5">
                     <ShieldCheck size={16} />
-                    <p className="text-[10px] font-medium uppercase tracking-wider">Secure End-to-End Encrypted Link</p>
+                    <p className="text-[10px] font-medium uppercase tracking-wider">{t("telehealth.encryptedLink")}</p>
                 </div>
             </div>
 
+            {showMessages ? (
+                <div className="flex flex-col h-[380px]">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.role === "patient" ? "justify-end" : "justify-start"}`}>
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-sm font-medium ${m.role === "patient"
+                                    ? "bg-primary text-white"
+                                    : "bg-white border border-gray-100 text-gray-800 shadow-sm"
+                                    }`}>
+                                    {m.content}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <form onSubmit={handleSendMessage} className="p-4 border-t bg-white flex gap-2">
+                        <input
+                            type="text"
+                            value={messageInput}
+                            onChange={(e) => setMessageInput(e.target.value)}
+                            placeholder={t("telehealth.messagePlaceholder")}
+                            className="flex-1 px-4 py-2 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                        <button type="submit" className="h-10 w-10 bg-primary text-white rounded-xl flex items-center justify-center hover:scale-105 transition-transform shrink-0">
+                            <Send size={18} />
+                        </button>
+                    </form>
+                </div>
+            ) : (
             <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h4 className="font-bold flex items-center gap-2">
                         <Share2 size={18} className="text-primary" />
-                        Clinical Data Sharing
+                        {t("telehealth.clinicalDataSharing")}
                     </h4>
                     <div
                         className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${sharing ? "bg-primary" : "bg-gray-200"}`}
@@ -144,7 +194,7 @@ export default function TeleHealthPortal() {
                     <div className="p-4 rounded-xl border bg-gray-50 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <FileText size={18} className="text-muted-foreground" />
-                            <span className="text-sm font-medium">Automatic Trend Reports</span>
+                            <span className="text-sm font-medium">{t("telehealth.automaticTrendReports")}</span>
                         </div>
                         <div
                             className={`w-10 h-5 rounded-full p-1 cursor-pointer transition-colors ${trendReports ? "bg-primary" : "bg-gray-200"}`}
@@ -157,7 +207,7 @@ export default function TeleHealthPortal() {
                     <div className="p-4 rounded-xl border bg-gray-50 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <Search size={18} className="text-muted-foreground" />
-                            <span className="text-sm font-medium">Remote Logbook Access</span>
+                            <span className="text-sm font-medium">{t("telehealth.remoteLogbookAccess")}</span>
                         </div>
                         <div
                             className={`w-10 h-5 rounded-full p-1 cursor-pointer transition-colors ${remoteAccess ? "bg-primary" : "bg-gray-200"}`}
@@ -169,15 +219,16 @@ export default function TeleHealthPortal() {
                 </div>
 
                 <div className="mt-8">
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Recent Doctor Notes</h4>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">{t("telehealth.recentDoctorNotes")}</h4>
                     <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5">
                         <p className="text-sm leading-relaxed italic text-gray-700">
-                            "Arjun, your post-lunch spikes are improving. Let's maintain the current basal rate. I've adjusted your reminder frequency to 2 hours for better visibility."
+                            {t("telehealth.doctorNoteContent")}
                         </p>
-                        <p className="text-[10px] font-bold mt-2 text-primary">— 2 HOURS AGO</p>
+                        <p className="text-[10px] font-bold mt-2 text-primary">{t("telehealth.twoHoursAgo")}</p>
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 }

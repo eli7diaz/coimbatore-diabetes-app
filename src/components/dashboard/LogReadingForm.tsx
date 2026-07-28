@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/components/i18n/LanguageContext";
-import { Activity, Droplets, Heart, Shield, AlertCircle, CheckCircle, Database } from "lucide-react";
+import { Activity, Droplets, Heart, Shield, AlertCircle, CheckCircle, Database, Lock } from "lucide-react";
 
 interface LogReadingFormProps {
     connectedDevices: {
@@ -92,7 +92,7 @@ export default function LogReadingForm({ connectedDevices, onLogReading }: LogRe
                         onChange={(e) => setSource(e.target.value)}
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
                     >
-                        <option value="manual">📋 {t("dashboard.selectDevice") === "Select Device" ? "Manual Entry" : "Entrada Manual"}</option>
+                        <option value="manual">📋 {t("dashboard.manualEntry")}</option>
                         {connectedDevices.cgm && <option value="cgm">📱 Dexter G6 CGM</option>}
                         {connectedDevices.watch && <option value="watch">⌚ Apple Watch S9</option>}
                         {connectedDevices.fitbit && <option value="fitbit">🏃 Fitbit Charge 6</option>}
@@ -214,6 +214,11 @@ export default function LogReadingForm({ connectedDevices, onLogReading }: LogRe
                         <span>{t("dashboard.submit")}</span>
                     )}
                 </button>
+
+                <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+                    <Lock size={11} />
+                    {t("dashboard.storageNote")}
+                </p>
             </form>
         </div>
     );

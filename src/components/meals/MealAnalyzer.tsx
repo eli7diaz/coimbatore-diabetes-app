@@ -5,7 +5,7 @@ import { useLanguage } from "@/components/i18n/LanguageContext";
 import { AppDatabase } from "@/lib/db";
 
 export default function MealAnalyzer() {
-    const { locale } = useLanguage();
+    const { locale, t } = useLanguage();
     const [image, setImage] = useState<string | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [result, setResult] = useState<{ carbs: number; calories: number; food: string } | null>(null);
@@ -181,9 +181,9 @@ export default function MealAnalyzer() {
                 <div>
                     <h3 className="text-xl font-bold flex items-center gap-2">
                         <Sparkles className="text-primary" size={20} />
-                        AI Meal Analysis
+                        {t("meal.title")}
                     </h3>
-                    <p className="text-sm text-muted-foreground">Capture or upload a photo to estimate carb content</p>
+                    <p className="text-sm text-muted-foreground">{t("meal.subtitle")}</p>
                 </div>
                 {(image || isStreaming) && !analyzing && (
                     <button
@@ -191,7 +191,7 @@ export default function MealAnalyzer() {
                         className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
                     >
                         <X size={14} />
-                        Reset
+                        {t("meal.reset")}
                     </button>
                 )}
             </div>
@@ -242,12 +242,12 @@ export default function MealAnalyzer() {
                             {analyzing ? (
                                 <div className="relative z-10 flex flex-col items-center gap-2">
                                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                                    <span className="text-sm font-bold bg-white/80 px-3 py-1 rounded-full text-primary">GPT-4 Vision analyzing...</span>
+                                    <span className="text-sm font-bold bg-white/80 px-3 py-1 rounded-full text-primary">{t("meal.analyzing")}</span>
                                 </div>
                             ) : (
                                 <div className="relative z-10 flex flex-col items-center gap-2 text-primary">
                                     <CheckCircle2 size={48} className="drop-shadow-lg" />
-                                    <span className="text-sm font-bold bg-white/80 px-3 py-1 rounded-full">Analysis Complete</span>
+                                    <span className="text-sm font-bold bg-white/80 px-3 py-1 rounded-full">{t("meal.complete")}</span>
                                 </div>
                             )}
                         </>
@@ -259,17 +259,17 @@ export default function MealAnalyzer() {
                                     className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all hover:scale-105"
                                 >
                                     <Camera size={32} />
-                                    <span className="text-sm font-bold">Use Camera</span>
+                                    <span className="text-sm font-bold">{t("meal.useCamera")}</span>
                                 </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); document.getElementById('meal-upload')?.click(); }}
                                     className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 transition-all hover:scale-105"
                                 >
                                     <Flip size={32} />
-                                    <span className="text-sm font-bold">Upload File</span>
+                                    <span className="text-sm font-bold">{t("meal.uploadFile")}</span>
                                 </button>
                             </div>
-                            <p className="text-xs text-muted-foreground text-center">Capture live meal photo for instant AI analysis</p>
+                            <p className="text-xs text-muted-foreground text-center">{t("meal.captureHint")}</p>
                         </div>
                     )}
                 </div>

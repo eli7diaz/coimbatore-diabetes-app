@@ -11,7 +11,7 @@ interface GuideSection {
 }
 
 export default function UserGuide() {
-    const { locale } = useLanguage();
+    const { locale, t } = useLanguage();
     const [expandedSection, setExpandedSection] = useState<number | null>(null);
 
     const toggleSection = (index: number) => {
@@ -222,8 +222,6 @@ export default function UserGuide() {
     };
 
     const currentGuide = guides[locale] || guides.en;
-    const titleText = locale === "es" ? "Guía de Usuario e Instrucciones" : locale === "ta" ? "பயனர் கையேடு & வழிமுறைகள்" : locale === "te" ? "వినియోగదారు గైడ్ & సూచనలు" : "User Guide & Instructions";
-    const subtitleText = locale === "es" ? "Instrucciones detalladas paso a paso para utilizar todas las funciones del portal." : locale === "ta" ? "போர்ட்டலின் அனைத்து அம்சங்களையும் பயன்படுத்துவதற்கான விரிவான வழிமுறைகள்." : locale === "te" ? "పోర్టల్ యొక్క అన్ని ఫీచర్లను ఉపయోగించడానికి వివరణాత్మక సూచనలు." : "Detailed step-by-step instructions for operating all portal features.";
 
     return (
         <div className="premium-card p-6 bg-white">
@@ -232,8 +230,8 @@ export default function UserGuide() {
                     <HelpCircle size={20} />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold">{titleText}</h3>
-                    <p className="text-sm text-muted-foreground font-semibold">{subtitleText}</p>
+                    <h3 className="text-xl font-bold">{t("dashboard.userGuideTitle")}</h3>
+                    <p className="text-sm text-muted-foreground font-semibold">{t("dashboard.userGuideSubtitle")}</p>
                 </div>
             </div>
 

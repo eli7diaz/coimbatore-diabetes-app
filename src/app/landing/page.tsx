@@ -32,12 +32,6 @@ export default function LandingPage() {
                                 {t("common.joinNetwork")}
                                 <ArrowRight size={18} />
                             </Link>
-                            <Link
-                                href="/auth/login"
-                                className="inline-flex items-center justify-center px-8 py-4 bg-white border border-gray-200 text-gray-900 font-bold rounded-2xl hover:bg-gray-50 transition-colors"
-                            >
-                                {t("common.signIn")}
-                            </Link>
                         </div>
                     </div>
 

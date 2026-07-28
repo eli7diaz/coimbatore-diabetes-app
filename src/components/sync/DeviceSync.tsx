@@ -20,17 +20,9 @@ interface DeviceSyncProps {
 }
 
 export default function DeviceSync({ connectedDevices, onToggleConnect, vitals }: DeviceSyncProps) {
-    const { t, locale } = useLanguage();
+    const { t } = useLanguage();
     const [syncing, setSyncing] = useState<string | null>(null);
 
-    const getSyncSubtitle = () => {
-        switch (locale) {
-            case "es": return "Sincronice datos de salud de sus dispositivos portátiles";
-            case "ta": return "அணியக்கூடிய சாதனங்களிலிருந்து தரவை ஒத்திசைக்கவும்";
-            case "te": return "ధరించగలిగే పరికరాల నుండి డేటాను సమకాలీకరించండి";
-            default: return "Sync health data from your wearables";
-        }
-    };
 
     const getDeviceValueString = (id: string) => {
         switch (id) {
@@ -64,7 +56,7 @@ export default function DeviceSync({ connectedDevices, onToggleConnect, vitals }
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h3 className="text-xl font-bold">{t("dashboard.syncTitle")}</h3>
-                    <p className="text-sm text-muted-foreground">{getSyncSubtitle()}</p>
+                    <p className="text-sm text-muted-foreground">{t("dashboard.syncSubtitle")}</p>
                 </div>
                 <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
                     <Plus size={20} />
@@ -101,9 +93,9 @@ export default function DeviceSync({ connectedDevices, onToggleConnect, vitals }
                                 {isSyncing ? (
                                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                 ) : isConnected ? (
-                                    locale === "es" ? "Desconectar" : locale === "ta" ? "துண்டி" : locale === "te" ? "డిస్‌కనెక్ట్" : "Disconnect"
+                                    t("dashboard.disconnect")
                                 ) : (
-                                    locale === "es" ? "Conectar" : locale === "ta" ? "இணை" : locale === "te" ? "కనెక్ట్" : "Connect"
+                                    t("dashboard.connect")
                                 )}
                             </button>
                         </div>
@@ -114,7 +106,7 @@ export default function DeviceSync({ connectedDevices, onToggleConnect, vitals }
             <div className="mt-6 p-4 rounded-xl bg-orange-50 border border-orange-100 flex gap-3 text-orange-800 animate-in slide-in-from-bottom duration-300">
                 <AlertCircle size={20} className="shrink-0" />
                 <p className="text-xs leading-relaxed">
-                    <strong>Pro-Tip:</strong> Enable continuous sync for your smart watch to see real-time heart rate and activity bursts correlated with your glucose levels.
+                    <strong>{t("dashboard.proTipLabel")}</strong> {t("dashboard.syncTip")}
                 </p>
             </div>
         </div>

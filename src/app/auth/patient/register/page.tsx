@@ -20,9 +20,11 @@ export default function RegisterPage() {
             return;
         }
         setLoading(true);
-        localStorage.setItem("auth", "true");
-        window.dispatchEvent(new Event("auth-change"));
-        setTimeout(() => router.push("/"), 2000);
+        setTimeout(() => {
+            localStorage.setItem("auth", "true");
+            window.dispatchEvent(new Event("auth-change"));
+            router.push("/");
+        }, 2000);
     };
 
     const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

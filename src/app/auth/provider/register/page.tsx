@@ -17,10 +17,12 @@ export default function ProviderRegisterPage() {
             return;
         }
         setLoading(true);
-        localStorage.setItem("auth", "true");
-        localStorage.setItem("role", "provider");
-        window.dispatchEvent(new Event("auth-change"));
-        setTimeout(() => router.push("/provider/dashboard"), 2000);
+        setTimeout(() => {
+            localStorage.setItem("auth", "true");
+            localStorage.setItem("role", "provider");
+            window.dispatchEvent(new Event("auth-change"));
+            router.push("/provider/dashboard");
+        }, 2000);
     };
 
     return (

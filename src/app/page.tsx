@@ -25,22 +25,59 @@ export default function Dashboard() {
         fitbit: false,
     });
 
-    const [glucoseData, setGlucoseData] = useState([
-        { time: "08:00", value: 110 },
-        { time: "09:00", value: 145 },
-        { time: "10:00", value: 160 },
-        { time: "11:00", value: 130 },
-        { time: "12:00", value: 95 },
-        { time: "13:00", value: 120 },
-        { time: "14:00", value: 140 },
-        { time: "15:00", value: 155 },
-    ]);
+    type Metric = "glucose" | "heartRate" | "activeBurn" | "sleep";
+    type Point = { time: string; value: number };
+
+    const [seriesByMetric, setSeriesByMetric] = useState<Record<Metric, Point[]>>({
+        glucose: [
+            { time: "08:00", value: 110 },
+            { time: "09:00", value: 145 },
+            { time: "10:00", value: 160 },
+            { time: "11:00", value: 130 },
+            { time: "12:00", value: 95 },
+            { time: "13:00", value: 120 },
+            { time: "14:00", value: 140 },
+            { time: "15:00", value: 155 },
+        ],
+        heartRate: [
+            { time: "08:00", value: 68 },
+            { time: "10:00", value: 74 },
+            { time: "12:00", value: 82 },
+            { time: "14:00", value: 76 },
+            { time: "15:00", value: 72 },
+        ],
+        activeBurn: [
+            { time: "08:00", value: 60 },
+            { time: "10:00", value: 180 },
+            { time: "12:00", value: 260 },
+            { time: "14:00", value: 360 },
+            { time: "15:00", value: 432 },
+        ],
+        sleep: [
+            { time: "Mon", value: 6.1 },
+            { time: "Tue", value: 5.8 },
+            { time: "Wed", value: 7.0 },
+            { time: "Thu", value: 6.4 },
+            { time: "Fri", value: 6.5 },
+        ],
+    });
 
     const [vitals, setVitals] = useState({
         glucose: 120,
         heartRate: 72,
         activeBurn: 432,
         sleep: 6.5,
+    });
+
+    const [connectingLiveFeed, setConnectingLiveFeed] = useState(false);
+
+    // Tracks whether we have any real reading for a metric, independent of
+    // whether its source device is connected (manual entries count too).
+    const [hasReading, setHasReading] = useState<Record<Metric, boolean>>({
+        glucose: true,
+        heartRate: false,
+        activeBurn: false,
+        sleep: false,
     });
 
     useEffect(() => {
@@ -75,16 +112,32 @@ export default function Dashboard() {
             });
             setVitals(latestVitals);
 
-            const glucoseLogs = vitalsLog
-                .filter(v => v.metricType === "glucose")
-                .map(v => {
-                    const timeStr = new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                    return { time: timeStr, value: v.value };
+            const metrics: Metric[] = ["glucose", "heartRate", "activeBurn", "sleep"];
+            setSeriesByMetric((prev) => {
+                const next = { ...prev };
+                metrics.forEach((m) => {
+                    const logs = vitalsLog
+                        .filter(v => v.metricType === m)
+                        .map(v => {
+                            const timeStr = new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                            return { time: timeStr, value: v.value };
+                        });
+                    if (logs.length > 0) {
+                        next[m] = logs.reverse();
+                    }
                 });
-                
-            if (glucoseLogs.length > 0) {
-                setGlucoseData(glucoseLogs.reverse());
-            }
+                return next;
+            });
+
+            setHasReading((prev) => {
+                const next = { ...prev };
+                metrics.forEach((m) => {
+                    if (vitalsLog.some(v => v.metricType === m)) {
+                        next[m] = true;
+                    }
+                });
+                return next;
+            });
         };
 
         loadDatabase();
@@ -106,12 +159,26 @@ export default function Dashboard() {
             ...prev,
             [metric]: value,
         }));
+        setHasReading((prev) => ({ ...prev, [metric]: true }));
 
-        if (metric === "glucose") {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            setGlucoseData((prev) => [...prev, { time: timeStr, value }]);
-        }
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        setSeriesByMetric((prev) => ({
+            ...prev,
+            [metric]: [...prev[metric], { time: timeStr, value }],
+        }));
+    };
+
+    const handleConnectLiveFeed = () => {
+        if (connectingLiveFeed) return;
+        setConnectingLiveFeed(true);
+        setTimeout(async () => {
+            if (!connectedDevices.cgm) {
+                await handleToggleConnect("cgm");
+            }
+            setConnectingLiveFeed(false);
+            document.getElementById("ecosystem-sync")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 900);
     };
 
     const handleToggleConnect = async (id: "cgm" | "watch" | "fitbit") => {
@@ -139,9 +206,17 @@ export default function Dashboard() {
                             </div>
                         ))}
                     </div>
-                    <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all">
-                        <Smartphone size={18} />
-                        {locale === "es" ? "Conectar Transmisión" : locale === "ta" ? "நேரடி ஊட்டத்தை இணைக்கவும்" : locale === "te" ? "లైవ్ ఫీడ్‌ని కనెక్ట్ చేయండి" : "Connect Live Feed"}
+                    <button
+                        onClick={handleConnectLiveFeed}
+                        disabled={connectingLiveFeed}
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all disabled:opacity-70"
+                    >
+                        {connectingLiveFeed ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        ) : (
+                            <Smartphone size={18} />
+                        )}
+                        {t("dashboard.connectLiveFeed")}
                     </button>
                 </div>
             </div>
@@ -152,29 +227,29 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <MetricCard
                         title={t("dashboard.lastGlucose")}
-                        value={connectedDevices.cgm ? String(vitals.glucose) : "--"}
+                        value={connectedDevices.cgm || hasReading.glucose ? String(vitals.glucose) : "--"}
                         unit="mg/dL"
                         icon={Droplets}
-                        status={connectedDevices.cgm ? (vitals.glucose > 180 ? "warning" : vitals.glucose < 70 ? "danger" : "normal") : "normal"}
+                        status={connectedDevices.cgm || hasReading.glucose ? (vitals.glucose > 180 ? "warning" : vitals.glucose < 70 ? "danger" : "normal") : "normal"}
                         trend={connectedDevices.cgm ? { value: "12", isUp: false } : undefined}
                     />
                     <MetricCard
                         title={t("dashboard.heartRate")}
-                        value={connectedDevices.watch ? String(vitals.heartRate) : "--"}
+                        value={connectedDevices.watch || hasReading.heartRate ? String(vitals.heartRate) : "--"}
                         unit="bpm"
                         icon={Heart}
-                        status={connectedDevices.watch ? (vitals.heartRate > 100 || vitals.heartRate < 60 ? "warning" : "normal") : "normal"}
+                        status={connectedDevices.watch || hasReading.heartRate ? (vitals.heartRate > 100 || vitals.heartRate < 60 ? "warning" : "normal") : "normal"}
                     />
                     <MetricCard
                         title={t("dashboard.activeBurn")}
-                        value={connectedDevices.fitbit ? String(vitals.activeBurn) : "--"}
+                        value={connectedDevices.fitbit || hasReading.activeBurn ? String(vitals.activeBurn) : "--"}
                         unit="kcal"
                         icon={Activity}
                         trend={connectedDevices.fitbit ? { value: "15%", isUp: true } : undefined}
                     />
                     <MetricCard
                         title={t("dashboard.deepSleep")}
-                        value={connectedDevices.fitbit ? String(vitals.sleep) : "--"}
+                        value={connectedDevices.fitbit || hasReading.sleep ? String(vitals.sleep) : "--"}
                         unit="hrs"
                         icon={Shield}
                     />
@@ -184,7 +259,7 @@ export default function Dashboard() {
             {/* Main Analysis Section */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 flex flex-col gap-8">
-                    <GlucoseChart data={glucoseData} isConnected={connectedDevices.cgm} />
+                    <GlucoseChart seriesByMetric={seriesByMetric} connectedDevices={connectedDevices} />
                     <MealAnalyzer />
                 </div>
 
@@ -199,7 +274,7 @@ export default function Dashboard() {
             </section>
 
             {/* Device Management Section */}
-            <section>
+            <section id="ecosystem-sync">
                 <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-muted-foreground mb-6">{t("dashboard.syncTitle")}</h2>
                 <DeviceSync connectedDevices={connectedDevices} onToggleConnect={handleToggleConnect} vitals={vitals} />
             </section>
@@ -211,7 +286,7 @@ export default function Dashboard() {
                     <div className="flex flex-col">
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest mb-3 self-start border border-primary/20">
                             <PlayCircle size={14} />
-                            {locale === "es" ? "Tutorial de Inicio" : locale === "ta" ? "துவக்க பயிற்சி" : locale === "te" ? "ప్రారంభ ట్యుటోరియల్" : "Onboarding Tutorial"}
+                            {t("dashboard.onboardingTutorial")}
                         </div>
                         <h2 className="text-3xl font-extrabold text-gray-900 mb-2">{t("tutorial.title")}</h2>
                         <p className="text-sm text-muted-foreground font-semibold max-w-2xl">{t("tutorial.subtitle")}</p>
