@@ -1,149 +1,158 @@
 "use client";
 
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  setDoc,
+  doc,
+  getDoc,
+  query,
+  orderBy,
+  where,
+  deleteDoc
+} from "firebase/firestore";
+
+// Firebase credentials
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+};
+
+// Initialize Firebase (Singleton pattern)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
+
 export interface VitalReading {
-    id: string;
-    timestamp: number;
-    metricType: "glucose" | "heartRate" | "activeBurn" | "sleep";
-    value: number;
-    sourceDevice: string;
+  id: string;
+  timestamp: number;
+  metricType: "glucose" | "heartRate" | "activeBurn" | "sleep";
+  value: number;
+  sourceDevice: string;
 }
 
 export interface DeviceStatus {
-    deviceId: "cgm" | "watch" | "fitbit";
-    connected: boolean;
-    lastSync: number;
+  deviceId: "cgm" | "watch" | "fitbit";
+  connected: boolean;
+  lastSync: number;
 }
 
 export interface MealLog {
-    id: string;
-    timestamp: number;
-    food: string;
-    carbs: number;
-    calories: number;
-    image: string | null;
+  id: string;
+  timestamp: number;
+  food: string;
+  carbs: number;
+  calories: number;
+  image: string | null;
 }
 
 export interface InsulinLog {
-    id: string;
-    timestamp: number;
-    carbs: number;
-    dose: number;
+  id: string;
+  timestamp: number;
+  carbs: number;
+  dose: number;
 }
 
-// LocalStorage Database implementation (Dependency Agnostic Interface)
 export class AppDatabase {
-    private static KEYS = {
-        VITALS: "indiametabolic_vitals",
-        DEVICES: "indiametabolic_devices",
-        MEALS: "indiametabolic_meals",
-        INSULIN: "indiametabolic_insulin",
+  // --- Vitals API ---
+  public static async saveVital(reading: Omit<VitalReading, "id" | "timestamp">): Promise<VitalReading> {
+    const timestamp = Date.now();
+    const data = { ...reading, timestamp };
+    const docRef = await addDoc(collection(db, "vitals"), data);
+    return {
+      id: docRef.id,
+      ...data
     };
+  }
 
-    // Helper to run safe client-side operations
-    private static isClient(): boolean {
-        return typeof window !== "undefined";
+  public static async getVitals(metricType?: "glucose" | "heartRate" | "activeBurn" | "sleep"): Promise<VitalReading[]> {
+    const vitalsRef = collection(db, "vitals");
+    let q = query(vitalsRef, orderBy("timestamp", "desc"));
+    
+    if (metricType) {
+      q = query(vitalsRef, where("metricType", "==", metricType), orderBy("timestamp", "desc"));
     }
+    
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as VitalReading));
+  }
 
-    private static get<T>(key: string, defaultValue: T): T {
-        if (!this.isClient()) return defaultValue;
-        try {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : defaultValue;
-        } catch (e) {
-            console.error("Database read error for key", key, e);
-            return defaultValue;
-        }
-    }
+  // --- Devices API ---
+  public static async saveDeviceStatus(deviceId: "cgm" | "watch" | "fitbit", connected: boolean): Promise<DeviceStatus> {
+    const lastSync = Date.now();
+    const status: DeviceStatus = { deviceId, connected, lastSync };
+    await setDoc(doc(db, "devices", deviceId), status);
+    return status;
+  }
 
-    private static set<T>(key: string, value: T): void {
-        if (!this.isClient()) return;
-        try {
-            localStorage.setItem(key, JSON.stringify(value));
-        } catch (e) {
-            console.error("Database write error for key", key, e);
-        }
-    }
+  public static async getDeviceStatuses(): Promise<Record<string, DeviceStatus>> {
+    const statuses: Record<string, DeviceStatus> = {
+      cgm: { deviceId: "cgm", connected: true, lastSync: Date.now() },
+      watch: { deviceId: "watch", connected: false, lastSync: Date.now() },
+      fitbit: { deviceId: "fitbit", connected: false, lastSync: Date.now() }
+    };
+    const snapshot = await getDocs(collection(db, "devices"));
+    snapshot.docs.forEach(doc => {
+      const data = doc.data() as DeviceStatus;
+      statuses[data.deviceId] = data;
+    });
+    return statuses;
+  }
 
-    // --- Vitals API ---
-    public static async saveVital(reading: Omit<VitalReading, "id" | "timestamp">): Promise<VitalReading> {
-        const vitals = this.get<VitalReading[]>(this.KEYS.VITALS, []);
-        const newReading: VitalReading = {
-            ...reading,
-            id: Math.random().toString(36).substring(2, 9),
-            timestamp: Date.now(),
-        };
-        this.set(this.KEYS.VITALS, [newReading, ...vitals]);
-        return newReading;
-    }
+  // --- Meals API ---
+  public static async saveMealLog(meal: Omit<MealLog, "id" | "timestamp">): Promise<MealLog> {
+    const timestamp = Date.now();
+    const data = { ...meal, timestamp };
+    const docRef = await addDoc(collection(db, "meals"), data);
+    return {
+      id: docRef.id,
+      ...data
+    };
+  }
 
-    public static async getVitals(metricType?: "glucose" | "heartRate" | "activeBurn" | "sleep"): Promise<VitalReading[]> {
-        const vitals = this.get<VitalReading[]>(this.KEYS.VITALS, []);
-        if (metricType) {
-            return vitals.filter(v => v.metricType === metricType);
-        }
-        return vitals;
-    }
+  public static async getMealLogs(): Promise<MealLog[]> {
+    const mealsRef = collection(db, "meals");
+    const q = query(mealsRef, orderBy("timestamp", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as MealLog));
+  }
 
-    // --- Devices API ---
-    public static async saveDeviceStatus(deviceId: "cgm" | "watch" | "fitbit", connected: boolean): Promise<DeviceStatus> {
-        const devices = this.get<Record<string, DeviceStatus>>(this.KEYS.DEVICES, {});
-        const status: DeviceStatus = {
-            deviceId,
-            connected,
-            lastSync: Date.now(),
-        };
-        devices[deviceId] = status;
-        this.set(this.KEYS.DEVICES, devices);
-        return status;
-    }
+  // --- Insulin API ---
+  public static async saveInsulinLog(log: Omit<InsulinLog, "id" | "timestamp">): Promise<InsulinLog> {
+    const timestamp = Date.now();
+    const data = { ...log, timestamp };
+    const docRef = await addDoc(collection(db, "insulin"), data);
+    return {
+      id: docRef.id,
+      ...data
+    };
+  }
 
-    public static async getDeviceStatuses(): Promise<Record<string, DeviceStatus>> {
-        const defaultStatuses: Record<string, DeviceStatus> = {
-            cgm: { deviceId: "cgm", connected: true, lastSync: Date.now() },
-            watch: { deviceId: "watch", connected: false, lastSync: Date.now() },
-            fitbit: { deviceId: "fitbit", connected: false, lastSync: Date.now() },
-        };
-        return this.get<Record<string, DeviceStatus>>(this.KEYS.DEVICES, defaultStatuses);
-    }
+  public static async getInsulinLogs(): Promise<InsulinLog[]> {
+    const insulinRef = collection(db, "insulin");
+    const q = query(insulinRef, orderBy("timestamp", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as InsulinLog));
+  }
 
-    // --- Meals API ---
-    public static async saveMealLog(meal: Omit<MealLog, "id" | "timestamp">): Promise<MealLog> {
-        const meals = this.get<MealLog[]>(this.KEYS.MEALS, []);
-        const newMeal: MealLog = {
-            ...meal,
-            id: Math.random().toString(36).substring(2, 9),
-            timestamp: Date.now(),
-        };
-        this.set(this.KEYS.MEALS, [newMeal, ...meals]);
-        return newMeal;
-    }
-
-    public static async getMealLogs(): Promise<MealLog[]> {
-        return this.get<MealLog[]>(this.KEYS.MEALS, []);
-    }
-
-    // --- Insulin API ---
-    public static async saveInsulinLog(log: Omit<InsulinLog, "id" | "timestamp">): Promise<InsulinLog> {
-        const logs = this.get<InsulinLog[]>(this.KEYS.INSULIN, []);
-        const newLog: InsulinLog = {
-            ...log,
-            id: Math.random().toString(36).substring(2, 9),
-            timestamp: Date.now(),
-        };
-        this.set(this.KEYS.INSULIN, [newLog, ...logs]);
-        return newLog;
-    }
-
-    public static async getInsulinLogs(): Promise<InsulinLog[]> {
-        return this.get<InsulinLog[]>(this.KEYS.INSULIN, []);
-    }
-
-    // --- Global Utility ---
-    public static async clearAll(): Promise<void> {
-        if (!this.isClient()) return;
-        localStorage.removeItem(this.KEYS.VITALS);
-        localStorage.removeItem(this.KEYS.DEVICES);
-        localStorage.removeItem(this.KEYS.MEALS);
-        localStorage.removeItem(this.KEYS.INSULIN);
-    }
+  // --- Global Utility ---
+  public static async clearAll(): Promise<void> {
+    // Warning: This only clears local client state representations if needed.
+    // For security, mass deletions should be handled carefully via backend or Admin console.
+  }
 }
