@@ -1,14 +1,85 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { Camera, CheckCircle2, AlertCircle, Sparkles, X, FlipHorizontal as Flip } from "lucide-react";
 import InsulinCalculator from "./InsulinCalculator";
 import { useLanguage } from "@/components/i18n/LanguageContext";
 import { AppDatabase } from "@/lib/db";
 
+const ANALYZE_ENDPOINT = "/.netlify/functions/analyze-meal";
+
+// Keeps the upload small enough for Firestore's 1MiB document cap and cheap
+// enough to send to a vision model, without losing detail that matters.
+const MAX_EDGE_PX = 1024;
+const JPEG_QUALITY = 0.8;
+
+type MealResult = {
+    food: string;
+    carbs: number;
+    calories: number;
+    confidence: "high" | "medium" | "low";
+    notes: string;
+};
+
+/** Re-encode a data URL down to MAX_EDGE_PX on its long side. */
+function downscale(dataUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, MAX_EDGE_PX / Math.max(img.width, img.height));
+            const width = Math.max(1, Math.round(img.width * scale));
+            const height = Math.max(1, Math.round(img.height * scale));
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                reject(new Error("Could not process the image on this device."));
+                return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
+        };
+        img.onerror = () => reject(new Error("That file could not be read as an image."));
+        img.src = dataUrl;
+    });
+}
+
+function describeError(status: number, data: { error?: string; message?: string } | null): string {
+    // A 404 here means the serverless function isn't being served at all —
+    // almost always "next dev" was started directly instead of "npm run dev".
+    if (status === 404) {
+        return "The analysis service isn't running. Stop the server and start it with `npm run dev`.";
+    }
+
+    switch (data?.error) {
+        case "model_loading":
+            return "The model is starting up. Give it a few seconds and try again.";
+        case "upstream_timeout":
+            return "The model took too long to respond. Try again.";
+        case "not_food":
+            return "That doesn't look like a meal. Try another photo.";
+        case "unsupported_media_type":
+            return "Use a JPEG, PNG, or WebP image.";
+        case "image_too_large":
+            return "That image is too large. Try a smaller photo.";
+        case "server_not_configured":
+            return "The server is missing its Hugging Face API key.";
+        case "unparseable_response":
+            return "The model returned an unexpected answer. Try again.";
+        default:
+            return data?.message || `Analysis failed (${status}).`;
+    }
+}
+
 export default function MealAnalyzer() {
     const { locale, t } = useLanguage();
     const [image, setImage] = useState<string | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
-    const [result, setResult] = useState<{ carbs: number; calories: number; food: string } | null>(null);
+    const [result, setResult] = useState<MealResult | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [showCalculator, setShowCalculator] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -28,10 +99,12 @@ export default function MealAnalyzer() {
 
     const handleSaveEdit = async () => {
         if (editFood.trim() === "") return;
-        const updatedMeal = {
+        const updatedMeal: MealResult = {
             food: editFood,
             carbs: editCarbs,
-            calories: editCalories
+            calories: editCalories,
+            confidence: "high",
+            notes: "Corrected by you.",
         };
         setResult(updatedMeal);
         setIsEditing(false);
@@ -57,6 +130,11 @@ export default function MealAnalyzer() {
                 // Clear any previous results
                 setImage(null);
                 setResult(null);
+                setError(null);
+            } else {
+                // Nothing to attach the stream to — release the camera so its
+                // indicator light doesn't stay on with no way to stop it.
+                stream.getTracks().forEach((track) => track.stop());
             }
         } catch (err) {
             console.error("Error accessing camera:", err);
@@ -83,74 +161,90 @@ export default function MealAnalyzer() {
             if (context) {
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const dataUrl = canvas.toDataURL("image/jpeg");
-                setImage(dataUrl);
                 stopCamera();
-                simulateAnalysis("captured_camera_photo.jpg");
+                void runAnalysis(dataUrl);
             }
         }
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImage(reader.result as string);
-                simulateAnalysis(file.name);
-                // Clear the input value so the same file can be selected again
-                e.target.value = "";
-            };
-            reader.readAsDataURL(file);
-        }
+        if (!file) return;
+
+        const input = e.target;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            void runAnalysis(reader.result as string);
+            // Clear the input value so the same file can be selected again
+            input.value = "";
+        };
+        reader.onerror = () => {
+            setError("That file could not be read.");
+            input.value = "";
+        };
+        reader.readAsDataURL(file);
     };
 
-    const getSimulatedMeal = (fileName: string) => {
-        const nameLower = fileName.toLowerCase();
-        const meals = [
-            { food: "Chicken Biryani with Raita", carbs: 45, calories: 320 },
-            { food: "Masala Dosa with Sambar & Chutney", carbs: 55, calories: 380 },
-            { food: "Idli (3 pcs) with Sambar", carbs: 40, calories: 220 },
-            { food: "Roti (2 pcs) with Paneer Butter Masala", carbs: 48, calories: 420 },
-            { food: "Dal Tadka with Steamed Basmati Rice", carbs: 62, calories: 360 },
-            { food: "Samosa (2 pcs) with Mint Chutney", carbs: 32, calories: 310 },
-            { food: "Alu Paratha with Curd", carbs: 52, calories: 390 }
-        ];
-
-        if (nameLower.includes("dosa")) return meals[1];
-        if (nameLower.includes("idli")) return meals[2];
-        if (nameLower.includes("paneer") || nameLower.includes("roti") || nameLower.includes("chapati")) return meals[3];
-        if (nameLower.includes("rice") || nameLower.includes("dal")) return meals[4];
-        if (nameLower.includes("samosa")) return meals[5];
-        if (nameLower.includes("paratha") || nameLower.includes("aloo")) return meals[6];
-        if (nameLower.includes("biryani") || nameLower.includes("chicken")) return meals[0];
-
-        // Random pick if no keyword matches
-        const randomIndex = Math.floor(Math.random() * meals.length);
-        return meals[randomIndex];
-    };
-
-    const simulateAnalysis = (fileName: string) => {
+    /**
+     * Send the photo to the vision model and show what it reports.
+     * `rawDataUrl` is passed in rather than read from state so the value is
+     * always the image we just captured, never the previous render's.
+     */
+    const runAnalysis = async (rawDataUrl: string) => {
         setAnalyzing(true);
         setResult(null);
-        setTimeout(async () => {
-            const meal = getSimulatedMeal(fileName);
-            setResult(meal);
-            setAnalyzing(false);
+        setError(null);
+        setImage(rawDataUrl);
 
-            // Save detected log to database
-            await AppDatabase.saveMealLog({
-                food: meal.food,
-                carbs: meal.carbs,
-                calories: meal.calories,
-                image: image,
+        try {
+            const compact = await downscale(rawDataUrl);
+
+            const response = await fetch(ANALYZE_ENDPOINT, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ image: compact }),
             });
-        }, 2000);
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                setError(describeError(response.status, data));
+                return;
+            }
+
+            const meal: MealResult = {
+                food: data.food,
+                carbs: data.carbs_g,
+                calories: data.calories,
+                confidence: data.confidence,
+                notes: data.notes,
+            };
+            setResult(meal);
+
+            // Persisting is best-effort: a failed write shouldn't discard a
+            // result the user is already looking at.
+            try {
+                await AppDatabase.saveMealLog({
+                    food: meal.food,
+                    carbs: meal.carbs,
+                    calories: meal.calories,
+                    image: compact,
+                });
+            } catch (saveErr) {
+                console.error("Could not save meal log:", saveErr);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Something went wrong.");
+        } finally {
+            setAnalyzing(false);
+        }
     };
 
     const reset = () => {
         stopCamera();
         setImage(null);
         setResult(null);
+        setError(null);
         setAnalyzing(false);
         setShowCalculator(false);
         setIsEditing(false);
@@ -238,11 +332,16 @@ export default function MealAnalyzer() {
                         </div>
                     ) : image ? (
                         <>
-                            <img src={image} alt="Meal" className={`absolute inset-0 w-full h-full object-cover ${analyzing ? "opacity-40" : ""}`} />
+                            <img src={image} alt="Meal" className={`absolute inset-0 w-full h-full object-cover ${analyzing || error ? "opacity-40" : ""}`} />
                             {analyzing ? (
                                 <div className="relative z-10 flex flex-col items-center gap-2">
                                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                                     <span className="text-sm font-bold bg-white/80 px-3 py-1 rounded-full text-primary">{t("meal.analyzing")}</span>
+                                </div>
+                            ) : error ? (
+                                <div className="relative z-10 flex flex-col items-center gap-2 text-red-600">
+                                    <AlertCircle size={48} className="drop-shadow-lg" />
+                                    <span className="text-sm font-bold bg-white/90 px-3 py-1 rounded-full">Analysis failed</span>
                                 </div>
                             ) : (
                                 <div className="relative z-10 flex flex-col items-center gap-2 text-primary">
@@ -275,7 +374,21 @@ export default function MealAnalyzer() {
                 </div>
 
                 <div className="flex flex-col justify-center gap-4">
-                    {result ? (
+                    {error ? (
+                        <div className="p-6 rounded-2xl border border-red-200 bg-red-50/60 space-y-3 animate-in fade-in duration-300">
+                            <div className="flex items-center gap-2 text-red-600 font-bold text-sm uppercase tracking-wider">
+                                <AlertCircle size={16} />
+                                <span>Analysis Failed</span>
+                            </div>
+                            <p className="text-sm text-gray-700 font-semibold leading-relaxed">{error}</p>
+                            <button
+                                onClick={reset}
+                                className="w-full mt-2 bg-gray-900 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-gray-800 transition-colors cursor-pointer"
+                            >
+                                Try another photo
+                            </button>
+                        </div>
+                    ) : result ? (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             {isEditing ? (
                                 <div className="space-y-4">
@@ -342,6 +455,21 @@ export default function MealAnalyzer() {
                                                 {locale === "es" ? "Comida Detectada" : locale === "ta" ? "கண்டறியப்பட்ட உணவு" : locale === "te" ? "గుర్తించిన ఆహారం" : "Detected Meal"}
                                             </h4>
                                             <p className="text-lg font-bold">{result.food}</p>
+                                            <span
+                                                className={`inline-block mt-2 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${result.confidence === "high"
+                                                    ? "bg-green-50 text-green-700 border-green-200"
+                                                    : result.confidence === "medium"
+                                                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                        : "bg-red-50 text-red-700 border-red-200"
+                                                    }`}
+                                            >
+                                                {result.confidence} confidence
+                                            </span>
+                                            {result.notes && (
+                                                <p className="text-[11px] text-muted-foreground font-semibold mt-2 leading-relaxed">
+                                                    {result.notes}
+                                                </p>
+                                            )}
                                         </div>
                                         <button
                                             onClick={() => setIsEditing(true)}
@@ -364,6 +492,14 @@ export default function MealAnalyzer() {
                                             <span className="text-2xl font-bold">{result.calories}</span>
                                         </div>
                                     </div>
+                                    {result.confidence === "low" && (
+                                        <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                            <AlertCircle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                                            <p className="text-[11px] text-amber-800 font-semibold leading-relaxed">
+                                                Low confidence estimate. Check the carb value with &quot;Correct AI&quot; before using it for a dose.
+                                            </p>
+                                        </div>
+                                    )}
                                     <button
                                         onClick={() => setShowCalculator(true)}
                                         className="w-full mt-6 bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform cursor-pointer"
