@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
+    "dev": "netlify dev",
+    "dev:no-functions": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
+    "netlify-cli": "^27.5.2",
     "react-is": "^19.2.4",
     "tailwindcss": "^4.1.18"
   }
