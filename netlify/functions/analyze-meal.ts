@@ -25,26 +25,39 @@ const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const SYSTEM_PROMPT = `You identify meals from photographs for a diabetes care app used in Coimbatore, Tamil Nadu, India. Most meals you see will be South Indian home cooking (idli, dosa, vada, pongal, upma, sambar, rasam, curd rice, lemon rice, poori, parotta, biryani), but you may also see North Indian, Western, or restaurant food.
 
-Identify the dish and estimate its carbohydrate and calorie content for the portion actually visible in the photo.
+Your main job is to say what is on the plate and how much of it. The app looks up carbohydrate from its own nutrition table, so your counts matter far more than your nutrition knowledge.
+
+Alongside each food, also give your best estimate of the carbohydrate and calories in ONE unit of it. These are a FALLBACK, used only when a food is missing from the app's table; for foods the app already knows, your figures are ignored. Give realistic per-unit numbers for the unit you counted in, not for the whole plate.
+
+For each distinct food visible, report its name and how many units of it there are:
+- Countable foods (idli, dosa, vada, poori, chapati, parotta, appam, idiyappam): count the actual pieces. 6 idli is {"name": "idli", "count": 6}.
+- Served foods (sambar, rasam, rice, curd rice, pongal, upma, biryani): count servings, where 1 means one normal bowl or plate. Two small katoris of sambar is {"name": "sambar", "count": 2}.
+- Condiments (chutney, pickle): count tablespoons.
 
 Rules:
-- Judge portion size from visible references: plate diameter, katori/bowl size, spoons, hands.
-- Name the dish the way a local would (e.g. "medu vada", "curd rice", "masala dosa with sambar").
-- If several items share the plate, name the combination and give totals for everything visible.
-- Be honest about uncertainty. Set confidence to "low" when the portion is ambiguous, the photo is unclear, or the dish is hard to place. Do not guess confidently.
-- If the image is not food, set is_food to false and leave the other fields at zero/empty.
+- Name each food plainly and on its own: "idli", "sambar", "coconut chutney". Do not merge them into one name like "idli with sambar", and do not add descriptions.
+- Count what you can actually see. If idli are stacked or overlapping, count the ones visible and say so in notes.
+- Judge serving size against visible references: plate diameter, katori size, spoons, hands.
+- Set confidence to "low" when pieces are hard to count, the photo is unclear, or you are unsure what a dish is. Be honest; a low confidence is more useful than a confident guess.
+- If the image is not food, set is_food to false and return an empty items array.
 
 Reply with ONE JSON object and nothing else. No markdown, no code fences, no commentary.
 
-{"is_food": boolean, "food": string, "carbs_g": number, "calories": number, "confidence": "high" | "medium" | "low", "notes": string}
+{"is_food": boolean, "items": [{"name": string, "count": number, "est_carbs_per_unit": number, "est_calories_per_unit": number}], "confidence": "high" | "medium" | "low", "notes": string}
 
-"notes" is one short sentence naming the portion assumption you made (e.g. "Assumed 2 medium idli and about 100ml sambar").`;
+"notes" is one short sentence on what you counted and anything that made it hard (e.g. "Counted 10 idli around the rim; the two at the back may be partly hidden").`;
+
+type AnalysedItem = {
+  name: string;
+  count: number;
+  /** Fallback figures, used by the client only when the nutrition table has no match. */
+  est_carbs_per_unit: number;
+  est_calories_per_unit: number;
+};
 
 type AnalysisResult = {
   is_food: boolean;
-  food: string;
-  carbs_g: number;
-  calories: number;
+  items: AnalysedItem[];
   confidence: "high" | "medium" | "low";
   notes: string;
 };
@@ -79,30 +92,46 @@ function normalise(parsed: unknown): AnalysisResult | null {
   if (typeof parsed !== "object" || parsed === null) return null;
   const o = parsed as Record<string, unknown>;
 
-  const food = typeof o.food === "string" ? o.food.trim() : "";
-  const isFood = o.is_food !== false && food !== "";
-  if (!isFood) {
-    return { is_food: false, food: "", carbs_g: 0, calories: 0, confidence: "low", notes: "" };
-  }
-
-  const num = (v: unknown): number => {
-    const n = typeof v === "number" ? v : Number(v);
-    return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
-  };
-
   const confidence =
     o.confidence === "high" || o.confidence === "medium" || o.confidence === "low"
       ? o.confidence
       : "low";
+  const notes = typeof o.notes === "string" ? o.notes.trim() : "";
 
-  return {
-    is_food: true,
-    food,
-    carbs_g: num(o.carbs_g),
-    calories: num(o.calories),
-    confidence,
-    notes: typeof o.notes === "string" ? o.notes.trim() : "",
-  };
+  const rawItems = Array.isArray(o.items) ? o.items : [];
+  const items: AnalysedItem[] = [];
+
+  for (const raw of rawItems) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+
+    const name = typeof r.name === "string" ? r.name.trim() : "";
+    if (!name) continue;
+
+    // A missing or unusable count means "one of it" rather than zero — zero
+    // would silently drop food off the plate and understate the dose.
+    const parsedCount = typeof r.count === "number" ? r.count : Number(r.count);
+    const count =
+      Number.isFinite(parsedCount) && parsedCount > 0 ? Math.round(parsedCount * 10) / 10 : 1;
+
+    const nonNegative = (v: unknown): number => {
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : 0;
+    };
+
+    items.push({
+      name,
+      count,
+      est_carbs_per_unit: nonNegative(r.est_carbs_per_unit),
+      est_calories_per_unit: nonNegative(r.est_calories_per_unit),
+    });
+  }
+
+  if (o.is_food === false || items.length === 0) {
+    return { is_food: false, items: [], confidence: "low", notes };
+  }
+
+  return { is_food: true, items, confidence, notes };
 }
 
 export default async (req: Request): Promise<Response> => {

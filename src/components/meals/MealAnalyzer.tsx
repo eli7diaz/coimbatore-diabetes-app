@@ -5,6 +5,7 @@ import { Camera, CheckCircle2, AlertCircle, Sparkles, X, FlipHorizontal as Flip 
 import InsulinCalculator from "./InsulinCalculator";
 import { useLanguage } from "@/components/i18n/LanguageContext";
 import { AppDatabase } from "@/lib/db";
+import { lookupFood, type NutritionEntry } from "@/lib/nutrition";
 
 const ANALYZE_ENDPOINT = "/.netlify/functions/analyze-meal";
 
@@ -13,13 +14,47 @@ const ANALYZE_ENDPOINT = "/.netlify/functions/analyze-meal";
 const MAX_EDGE_PX = 1024;
 const JPEG_QUALITY = 0.8;
 
+/** One food the model spotted, matched against the nutrition table. */
+type MealItem = {
+    /** Stable key for React and for updates. */
+    key: string;
+    /** The name the model used, kept so the user can see what was recognised. */
+    name: string;
+    /** How many units. Editable, and the only thing the user needs to judge. */
+    count: number;
+    /** Table match, or null when this food is not in the nutrition table. */
+    entry: NutritionEntry | null;
+    /**
+     * Per-unit figures used only when `entry` is null. Seeded with the model's
+     * own estimate so an unknown food still produces a usable number, then
+     * editable. Far less trustworthy than the table.
+     */
+    fallbackCarbs: number;
+    fallbackCalories: number;
+    /** True once the user has typed over the model's estimate. */
+    userEdited: boolean;
+};
+
 type MealResult = {
-    food: string;
-    carbs: number;
-    calories: number;
+    items: MealItem[];
     confidence: "high" | "medium" | "low";
     notes: string;
 };
+
+function itemCarbs(item: MealItem): number {
+    const perUnit = item.entry ? item.entry.carbsPerUnit : item.fallbackCarbs;
+    return perUnit * item.count;
+}
+
+function itemCalories(item: MealItem): number {
+    const perUnit = item.entry ? item.entry.caloriesPerUnit : item.fallbackCalories;
+    return perUnit * item.count;
+}
+
+/** True when this line's figures are a guess rather than a table lookup. */
+function isEstimated(item: MealItem): boolean {
+    return item.entry === null;
+}
 
 /** Re-encode a data URL down to MAX_EDGE_PX on its long side. */
 function downscale(dataUrl: string): Promise<string> {
@@ -82,41 +117,32 @@ export default function MealAnalyzer() {
     const [error, setError] = useState<string | null>(null);
     const [showCalculator, setShowCalculator] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editFood, setEditFood] = useState("");
-    const [editCarbs, setEditCarbs] = useState(0);
-    const [editCalories, setEditCalories] = useState(0);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    useEffect(() => {
-        if (result) {
-            setEditFood(result.food);
-            setEditCarbs(result.carbs);
-            setEditCalories(result.calories);
-        }
-    }, [result]);
+    // Totals are derived, never stored, so editing a count cannot leave the
+    // displayed carbs and the dose disagreeing.
+    const totalCarbs = result ? result.items.reduce((sum, i) => sum + itemCarbs(i), 0) : 0;
+    const totalCalories = result ? result.items.reduce((sum, i) => sum + itemCalories(i), 0) : 0;
+    const estimatedCount = result ? result.items.filter(isEstimated).length : 0;
+    const usesUnverified = result
+        ? result.items.some((i) => i.entry !== null && !i.entry.verified)
+        : false;
 
-    const handleSaveEdit = async () => {
-        if (editFood.trim() === "") return;
-        const updatedMeal: MealResult = {
-            food: editFood,
-            carbs: editCarbs,
-            calories: editCalories,
-            confidence: "high",
-            notes: "Corrected by you.",
-        };
-        setResult(updatedMeal);
-        setIsEditing(false);
-
-        // Save corrected log to database
-        await AppDatabase.saveMealLog({
-            food: updatedMeal.food,
-            carbs: updatedMeal.carbs,
-            calories: updatedMeal.calories,
-            image: image,
-        });
+    const patchItem = (key: string, patch: Partial<MealItem>) => {
+        setResult((prev) =>
+            prev
+                ? { ...prev, items: prev.items.map((i) => (i.key === key ? { ...i, ...patch } : i)) }
+                : prev,
+        );
     };
+
+    const removeItem = (key: string) => {
+        setResult((prev) => (prev ? { ...prev, items: prev.items.filter((i) => i.key !== key) } : prev));
+    };
+
+    const describeMeal = (items: MealItem[]): string =>
+        items.map((i) => `${i.count} × ${i.entry ? i.entry.label : i.name}`).join(", ");
 
     const startCamera = async () => {
         try {
@@ -212,27 +238,46 @@ export default function MealAnalyzer() {
                 return;
             }
 
+            // The model reports what it saw; carbs come from the nutrition table.
+            const items: MealItem[] = (data.items ?? []).map(
+                (
+                    raw: {
+                        name: string;
+                        count: number;
+                        est_carbs_per_unit?: number;
+                        est_calories_per_unit?: number;
+                    },
+                    index: number,
+                ) => ({
+                    key: `${index}-${raw.name}`,
+                    name: raw.name,
+                    count: raw.count,
+                    entry: lookupFood(raw.name),
+                    fallbackCarbs: raw.est_carbs_per_unit ?? 0,
+                    fallbackCalories: raw.est_calories_per_unit ?? 0,
+                    userEdited: false,
+                }),
+            );
+
             const meal: MealResult = {
-                food: data.food,
-                carbs: data.carbs_g,
-                calories: data.calories,
+                items,
                 confidence: data.confidence,
                 notes: data.notes,
             };
             setResult(meal);
+            setAnalyzing(false);
 
-            // Persisting is best-effort: a failed write shouldn't discard a
-            // result the user is already looking at.
-            try {
-                await AppDatabase.saveMealLog({
-                    food: meal.food,
-                    carbs: meal.carbs,
-                    calories: meal.calories,
-                    image: compact,
-                });
-            } catch (saveErr) {
+            // Persisting is best-effort and deliberately not awaited: the result
+            // is already on screen, and a slow or failing write must not keep the
+            // spinner running over it.
+            void AppDatabase.saveMealLog({
+                food: describeMeal(items),
+                carbs: Math.round(items.reduce((sum, i) => sum + itemCarbs(i), 0)),
+                calories: Math.round(items.reduce((sum, i) => sum + itemCalories(i), 0)),
+                image: compact,
+            }).catch((saveErr) => {
                 console.error("Could not save meal log:", saveErr);
-            }
+            });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong.");
         } finally {
@@ -247,7 +292,6 @@ export default function MealAnalyzer() {
         setError(null);
         setAnalyzing(false);
         setShowCalculator(false);
-        setIsEditing(false);
 
         // Clear the file input element's value so it can be re-triggered
         const fileInput = document.getElementById("meal-upload") as HTMLInputElement;
@@ -265,7 +309,7 @@ export default function MealAnalyzer() {
             {showCalculator && result && (
                 <div className="absolute inset-x-0 top-0 z-50 p-2">
                     <InsulinCalculator
-                        carbs={result.carbs}
+                        carbs={Math.round(totalCarbs)}
                         onClose={() => setShowCalculator(false)}
                     />
                 </div>
@@ -390,124 +434,152 @@ export default function MealAnalyzer() {
                         </div>
                     ) : result ? (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            {isEditing ? (
-                                <div className="space-y-4">
-                                    <div className="p-4 rounded-xl border bg-gray-50/50 space-y-3">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
-                                            {locale === "es" ? "Editar Análisis de Comida" : locale === "ta" ? "உணவு பகுப்பாய்வை திருத்தவும்" : locale === "te" ? "భోజన విశ్లేషణను సవరించండి" : "Edit Meal Analysis"}
-                                        </h4>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] uppercase font-bold text-muted-foreground">
-                                                {locale === "es" ? "Nombre de la comida" : locale === "ta" ? "உணவின் பெயர்" : locale === "te" ? "ఆహారం పేరు" : "Food Name"}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={editFood}
-                                                onChange={(e) => setEditFood(e.target.value)}
-                                                className="w-full px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 font-semibold text-sm"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] uppercase font-bold text-muted-foreground">
-                                                    {locale === "es" ? "Carbohidratos (g)" : locale === "ta" ? "கார்போஹைட்ரேட்டுகள் (கி)" : locale === "te" ? "కార్బోహైడ్రేట్లు (గ్రా)" : "Carbs (g)"}
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    value={editCarbs}
-                                                    onChange={(e) => setEditCarbs(parseInt(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 font-semibold text-sm"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] uppercase font-bold text-muted-foreground">
-                                                    {locale === "es" ? "Calorías" : locale === "ta" ? "கலோரிகள்" : locale === "te" ? "క్యాలరీలు" : "Calories"}
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    value={editCalories}
-                                                    onChange={(e) => setEditCalories(parseInt(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 font-semibold text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={handleSaveEdit}
-                                            className="flex-1 bg-primary text-white font-bold py-2 rounded-lg text-sm hover:bg-primary/95 transition-all cursor-pointer"
-                                        >
-                                            {locale === "es" ? "Guardar" : locale === "ta" ? "சேமி" : locale === "te" ? "సేవ్ చేయి" : "Save"}
-                                        </button>
-                                        <button
-                                            onClick={() => setIsEditing(false)}
-                                            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg text-sm transition-all cursor-pointer"
-                                        >
-                                            {locale === "es" ? "Cancelar" : locale === "ta" ? "ரத்துசெய்" : locale === "te" ? "ரద్దు చేయి" : "Cancel"}
-                                        </button>
-                                    </div>
+                            <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 mb-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <h4 className="text-sm font-bold uppercase tracking-wider text-primary">
+                                        {locale === "es" ? "Comida Detectada" : locale === "ta" ? "கண்டறியப்பட்ட உணவு" : locale === "te" ? "గుర్తించిన ఆహారం" : "Detected Meal"}
+                                    </h4>
+                                    <span
+                                        className={`shrink-0 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${result.confidence === "high"
+                                            ? "bg-green-50 text-green-700 border-green-200"
+                                            : result.confidence === "medium"
+                                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                : "bg-red-50 text-red-700 border-red-200"
+                                            }`}
+                                    >
+                                        {result.confidence} confidence
+                                    </span>
                                 </div>
-                            ) : (
-                                <>
-                                    <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 mb-4 flex items-start justify-between gap-3">
-                                        <div>
-                                            <h4 className="text-sm font-bold uppercase tracking-wider text-primary mb-1">
-                                                {locale === "es" ? "Comida Detectada" : locale === "ta" ? "கண்டறியப்பட்ட உணவு" : locale === "te" ? "గుర్తించిన ఆహారం" : "Detected Meal"}
-                                            </h4>
-                                            <p className="text-lg font-bold">{result.food}</p>
-                                            <span
-                                                className={`inline-block mt-2 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${result.confidence === "high"
-                                                    ? "bg-green-50 text-green-700 border-green-200"
-                                                    : result.confidence === "medium"
-                                                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                                                        : "bg-red-50 text-red-700 border-red-200"
-                                                    }`}
-                                            >
-                                                {result.confidence} confidence
-                                            </span>
-                                            {result.notes && (
-                                                <p className="text-[11px] text-muted-foreground font-semibold mt-2 leading-relaxed">
-                                                    {result.notes}
+                                {result.notes && (
+                                    <p className="text-[11px] text-muted-foreground font-semibold mt-2 leading-relaxed">
+                                        {result.notes}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* One row per food. The count is the only thing the user has to judge,
+                                and carbs recompute from the nutrition table as it changes. */}
+                            <div className="rounded-xl border overflow-hidden mb-4 bg-white">
+                                {result.items.map((item) => (
+                                    <div
+                                        key={item.key}
+                                        className="flex items-center gap-2 px-3 py-2.5 border-b last:border-b-0"
+                                    >
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.5"
+                                            value={item.count}
+                                            onChange={(e) =>
+                                                patchItem(item.key, {
+                                                    count: Math.max(0, parseFloat(e.target.value) || 0),
+                                                })
+                                            }
+                                            aria-label={`Number of ${item.entry ? item.entry.label : item.name}`}
+                                            className="w-14 shrink-0 px-2 py-1 rounded-lg border bg-gray-50 text-sm font-bold text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold truncate">
+                                                {item.entry ? item.entry.label : item.name}
+                                            </p>
+                                            {item.entry ? (
+                                                <p className="text-[10px] text-muted-foreground font-semibold truncate">
+                                                    {item.entry.unit}
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] text-amber-700 font-semibold">
+                                                    {item.userEdited
+                                                        ? "Your value · not in nutrition table"
+                                                        : "AI estimate · not in nutrition table"}
                                                 </p>
                                             )}
                                         </div>
+                                        {item.entry ? (
+                                            <span className="text-sm font-bold tabular-nums shrink-0">
+                                                {itemCarbs(item).toFixed(1)}g
+                                            </span>
+                                        ) : (
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.5"
+                                                    value={item.fallbackCarbs}
+                                                    onChange={(e) =>
+                                                        patchItem(item.key, {
+                                                            fallbackCarbs: Math.max(
+                                                                0,
+                                                                parseFloat(e.target.value) || 0,
+                                                            ),
+                                                            userEdited: true,
+                                                        })
+                                                    }
+                                                    aria-label={`Carbs per unit for ${item.name}`}
+                                                    className="w-16 px-2 py-1 rounded-lg border border-amber-300 bg-amber-50 text-sm font-bold text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-200"
+                                                />
+                                                <span className="text-[10px] text-amber-700 font-bold">g/unit</span>
+                                            </div>
+                                        )}
                                         <button
-                                            onClick={() => setIsEditing(true)}
-                                            className="text-xs font-bold text-primary hover:underline bg-white border border-primary/20 px-2.5 py-1 rounded-lg shadow-sm hover:bg-primary/5 transition-all mt-1 cursor-pointer shrink-0 animate-pulse hover:animate-none"
+                                            onClick={() => removeItem(item.key)}
+                                            aria-label={`Remove ${item.entry ? item.entry.label : item.name}`}
+                                            className="shrink-0 text-gray-300 hover:text-red-500 transition-colors cursor-pointer"
                                         >
-                                            {locale === "es" ? "Corregir IA" : locale === "ta" ? "AI ஐ திருத்து" : locale === "te" ? "AI ని సరిచేయి" : "Correct AI"}
+                                            <X size={14} />
                                         </button>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 rounded-xl bg-gray-50 border">
-                                            <span className="text-xs text-muted-foreground block font-medium">
-                                                {locale === "es" ? "Carbohidratos Est." : locale === "ta" ? "மதிப்பிடப்பட்ட கார்ப்ஸ்" : locale === "te" ? "అంచనా కార్బోహైడ్రేట్లు" : "Est. Carbs"}
-                                            </span>
-                                            <span className="text-2xl font-bold">{result.carbs}g</span>
-                                        </div>
-                                        <div className="p-4 rounded-xl bg-gray-50 border">
-                                            <span className="text-xs text-muted-foreground block font-medium">
-                                                {locale === "es" ? "Calorías" : locale === "ta" ? "கலோரிகள்" : locale === "te" ? "క్యాలరీలు" : "Calories"}
-                                            </span>
-                                            <span className="text-2xl font-bold">{result.calories}</span>
-                                        </div>
-                                    </div>
-                                    {result.confidence === "low" && (
-                                        <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                                            <AlertCircle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                                            <p className="text-[11px] text-amber-800 font-semibold leading-relaxed">
-                                                Low confidence estimate. Check the carb value with &quot;Correct AI&quot; before using it for a dose.
-                                            </p>
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => setShowCalculator(true)}
-                                        className="w-full mt-6 bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform cursor-pointer"
-                                    >
-                                        {locale === "es" ? "Aplicar al Cálculo de Insulina" : locale === "ta" ? "இன்சுலின் கால்குலேட்டருக்குப் பயன்படுத்துங்கள்" : locale === "te" ? "ఇన్సులిన్ கால்குலேటర్‌కు వర్తింపజేయి" : "Apply to Insulin Calculator"}
-                                    </button>
-                                </>
+                                ))}
+                                {result.items.length === 0 && (
+                                    <p className="px-3 py-4 text-xs text-muted-foreground font-semibold text-center">
+                                        No foods left. Reset and try another photo.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 rounded-xl bg-gray-50 border">
+                                    <span className="text-xs text-muted-foreground block font-medium">
+                                        {locale === "es" ? "Carbohidratos Est." : locale === "ta" ? "மதிப்பிடப்பட்ட கார்ப்ஸ்" : locale === "te" ? "అంచనా కార్బోహైడ్రేట్లు" : "Est. Carbs"}
+                                    </span>
+                                    <span className="text-2xl font-bold tabular-nums">{Math.round(totalCarbs)}g</span>
+                                </div>
+                                <div className="p-4 rounded-xl bg-gray-50 border">
+                                    <span className="text-xs text-muted-foreground block font-medium">
+                                        {locale === "es" ? "Calorías" : locale === "ta" ? "கலோரிகள்" : locale === "te" ? "క్యాలరీలు" : "Calories"}
+                                    </span>
+                                    <span className="text-2xl font-bold tabular-nums">{Math.round(totalCalories)}</span>
+                                </div>
+                            </div>
+
+                            {estimatedCount > 0 && (
+                                <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                    <AlertCircle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                                    <p className="text-[11px] text-amber-800 font-semibold leading-relaxed">
+                                        {estimatedCount === 1 ? "One food is" : `${estimatedCount} foods are`} not
+                                        in the nutrition table, so {estimatedCount === 1 ? "its" : "their"} carb
+                                        figure is the AI&rsquo;s own estimate rather than a reference value. Check
+                                        it against the packet or a known portion before dosing.
+                                    </p>
+                                </div>
                             )}
+
+                            {usesUnverified && estimatedCount === 0 && (
+                                <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-gray-50 border">
+                                    <AlertCircle size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                                    <p className="text-[11px] text-muted-foreground font-semibold leading-relaxed">
+                                        Carb values come from a reference table that has not been checked by a
+                                        dietitian yet. Confirm the counts above match what you actually ate.
+                                    </p>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => setShowCalculator(true)}
+                                disabled={result.items.length === 0}
+                                className="w-full mt-6 bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform cursor-pointer disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                            >
+                                {locale === "es" ? "Aplicar al Cálculo de Insulina" : locale === "ta" ? "இன்சுலின் கால்குலேட்டருக்குப் பயன்படுத்துங்கள்" : locale === "te" ? "ఇన్సులిన్ కాలిక్యులేటర్‌కు వర్తింపజేయి" : "Apply to Insulin Calculator"}
+                            </button>
                         </div>
                     ) : (
                         <div className="p-6 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-4">
