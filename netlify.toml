@@ -1,3 +1,21 @@
 [build]
   publish = "out"
   command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# `npm run dev` runs `netlify dev`, which serves the app AND the functions on one
+# origin — http://localhost:3000 — so the app behaves locally exactly as it does
+# in production. Next runs on 3001 underneath; you don't need to visit it.
+#
+# NOTE: `command` must invoke Next directly, never "npm run dev" — that script
+# now calls netlify dev, which would recurse forever.
+[dev]
+  framework = "#custom"
+  command = "next dev --port 3001"
+  targetPort = 3001
+  port = 3000
+  publish = "out"
+  autoLaunch = false

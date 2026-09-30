@@ -4,4 +4,6 @@ node_modules
 out
 .DS_Store
 .netlify
+deno.lock
+.env
 .env.local
