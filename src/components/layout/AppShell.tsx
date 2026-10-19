@@ -9,7 +9,7 @@ import { isFullBleedAuthRoute } from "@/lib/authRoutes";
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
-    if (isFullBleedAuthRoute(pathname)) {
+    if (isFullBleedAuthRoute(pathname) || pathname === "/landing") {
         return <div className="flex-1">{children}</div>;
     }
 
