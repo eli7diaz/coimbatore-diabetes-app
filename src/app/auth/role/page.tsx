@@ -30,8 +30,8 @@ const portals: Record<
 };
 
 export default function RoleSelectionPage() {
-    const [portal, setPortal] = useState<Portal>("doctor");
-    const selected = portals[portal];
+    const [portal, setPortal] = useState<Portal | null>(null);
+    const selected = portal ? portals[portal] : null;
 
     return (
         <div className="min-h-screen bg-[#f4f3ef] px-4 py-4 sm:px-6 sm:py-5">
@@ -115,18 +115,39 @@ export default function RoleSelectionPage() {
                             })}
                         </div>
 
-                        <Link
-                            href={selected.signInHref}
-                            className="mt-6 flex h-12 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-                        >
-                            {selected.signIn}
-                        </Link>
-                        <Link
-                            href={selected.createHref}
-                            className="mt-3 flex h-12 items-center justify-center rounded-lg border border-slate-300 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
-                        >
-                            {selected.create}
-                        </Link>
+                        {selected ? (
+                            <>
+                                <Link
+                                    href={selected.signInHref}
+                                    className="mt-6 flex h-12 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                                >
+                                    {selected.signIn}
+                                </Link>
+                                <Link
+                                    href={selected.createHref}
+                                    className="mt-3 flex h-12 items-center justify-center rounded-lg border border-slate-300 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+                                >
+                                    {selected.create}
+                                </Link>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="mt-6 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white opacity-50"
+                                >
+                                    Sign In
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="mt-3 flex h-12 w-full items-center justify-center rounded-lg border border-slate-300 text-sm font-semibold text-slate-800 opacity-50"
+                                >
+                                    Create Account
+                                </button>
+                            </>
+                        )}
 
                         <div className="my-8 flex items-center gap-3">
                             <div className="h-px flex-1 bg-slate-200" />
