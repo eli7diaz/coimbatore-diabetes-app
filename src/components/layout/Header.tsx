@@ -61,7 +61,7 @@ export default function Header() {
                     <LanguageSelector />
                     {!auth.isAuth ? (
                         <div className="flex items-center gap-4">
-                            <Link href="/auth/login" className="text-xs font-bold text-gray-600 hover:text-primary transition-colors">{t("common.signIn")}</Link>
+                            <Link href="/auth/role" className="text-xs font-bold text-gray-600 hover:text-primary transition-colors">{t("common.signIn")}</Link>
                             <Link href="/auth/register" className="text-xs font-black text-primary hover:scale-105 transition-transform bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">{t("common.getStarted")}</Link>
                         </div>
                     ) : (

@@ -2,12 +2,19 @@
 
 import { Shield, Lock } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { isFullBleedAuthRoute } from "@/lib/authRoutes";
 
 export default function AuthLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const pathname = usePathname();
+    if (isFullBleedAuthRoute(pathname)) {
+        return children;
+    }
+
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
             <div className="absolute top-8 left-8 flex items-center gap-2">

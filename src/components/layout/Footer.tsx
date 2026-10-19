@@ -37,7 +37,7 @@ export default function Footer() {
                     <div>
                         <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">{t("footer.access")}</h4>
                         <ul className="space-y-4">
-                            <li><Link href="/auth/login" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.signIn")}</Link></li>
+                            <li><Link href="/auth/role" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.signIn")}</Link></li>
                             <li><Link href="/auth/patient/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.patientRegister")}</Link></li>
                             <li><Link href="/auth/provider/register" className="text-sm font-bold text-gray-600 hover:text-primary transition-colors">{t("footer.providerRegister")}</Link></li>
                         </ul>

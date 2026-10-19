@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import AIAssistant from "@/components/ai/AIAssistant";
-import Footer from "@/components/layout/Footer";
-import Header from "@/components/layout/Header";
+import AppShell from "@/components/layout/AppShell";
 import { LanguageProvider } from "@/components/i18n/LanguageContext";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,12 +20,7 @@ export default function RootLayout({
         <html lang="en">
             <body className={`${inter.className} min-h-screen bg-background flex flex-col`}>
                 <LanguageProvider>
-                    <Header />
-                    <main className="container mx-auto px-4 py-12 flex-1">
-                        {children}
-                    </main>
-                    <Footer />
-                    <AIAssistant />
+                    <AppShell>{children}</AppShell>
                 </LanguageProvider>
             </body>
         </html>
