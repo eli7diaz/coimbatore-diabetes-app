@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Droplets, HeartPulse, Pencil, Search, TestTube } from "lucide-react";
 import { getPortalPatient } from "@/lib/clinicalPortal";
+import { useLanguage } from "@/components/i18n/LanguageContext";
+import { fill, matchesQuery, portalCopy, tx } from "@/lib/i18n/portalCopy";
 
 type Kind = "Blood Glucose" | "Blood Pressure" | "HbA1c" | "Body Weight";
 type Entry = { id: string; kind: Kind; time: string; value: string; status: string; source: string; tone: string };
@@ -28,6 +30,9 @@ const older: Entry[] = Array.from({ length: 15 }, (_, index) => ({
 export default function ObservationEntry() {
     const params = useParams<{ id: string }>();
     const patient = getPortalPatient(params.id);
+    const { locale } = useLanguage();
+    const copy = portalCopy[locale];
+    const text = copy.observation;
     const [kind, setKind] = useState<Kind>("Blood Glucose");
     const [observedAt, setObservedAt] = useState("11/24/2023, 10:30 AM");
     const [source, setSource] = useState("Patient");
@@ -48,11 +53,10 @@ export default function ObservationEntry() {
 
     const rows = useMemo(() => {
         const all = showOlder ? [...log, ...older] : log;
-        const needle = filter.trim().toLowerCase();
-        return all.filter((entry) => !needle || `${entry.kind} ${entry.value} ${entry.source} ${entry.status}`.toLowerCase().includes(needle));
-    }, [log, showOlder, filter]);
+        return all.filter((entry) => matchesQuery(copy, filter, [entry.kind, entry.value, entry.source, entry.status, entry.time]));
+    }, [log, showOlder, filter, copy]);
 
-    if (!patient) return <p className="text-slate-500">That patient chart is not on this panel.</p>;
+    if (!patient) return <p className="text-slate-500">{copy.profile.missing}</p>;
 
     const reset = () => {
         setKind("Blood Glucose");
@@ -77,13 +81,13 @@ export default function ObservationEntry() {
     return (
         <div className="mx-auto max-w-6xl space-y-4">
             <p className="text-xs text-slate-400">
-                <Link href="/provider/patients">Patient Records</Link> &gt; {patient.name} (ID: {patient.mrn})
+                <Link href="/provider/patients">{text.records}</Link> &gt; {patient.name} (ID: {patient.mrn})
             </p>
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold">Observation Entry</h1>
-                <button onClick={() => setAudit((value) => !value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">View Audit Log</button>
+                <h1 className="text-3xl font-bold">{text.title}</h1>
+                <button onClick={() => setAudit((value) => !value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">{text.audit}</button>
             </div>
-            {audit && <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">Audit: last sync 2 minutes ago. Manual entries stay attached to {patient.name}&apos;s chart.</p>}
+            {audit && <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">{fill(text.auditBody, { name: patient.name })}</p>}
 
             <div className="grid gap-4 lg:grid-cols-[1.4fr_0.7fr]">
                 <form
@@ -93,86 +97,86 @@ export default function ObservationEntry() {
                         record();
                     }}
                 >
-                    <h2 className="font-semibold">New Measurement Entry</h2>
+                    <h2 className="font-semibold">{text.newEntry}</h2>
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <label className="text-sm text-slate-500">Measurement Kind
+                        <label className="text-sm text-slate-500">{text.kind}
                             <select value={kind} onChange={(event) => setKind(event.target.value as Kind)} className="mt-1 h-11 w-full rounded-lg border border-slate-200 px-3 text-slate-900">
-                                <option>Blood Glucose</option>
-                                <option>Blood Pressure</option>
-                                <option>HbA1c</option>
-                                <option>Body Weight</option>
+                                <option value="Blood Glucose">{tx(copy, "Blood Glucose")}</option>
+                                <option value="Blood Pressure">{tx(copy, "Blood Pressure")}</option>
+                                <option value="HbA1c">{tx(copy, "HbA1c")}</option>
+                                <option value="Body Weight">{tx(copy, "Body Weight")}</option>
                             </select>
                         </label>
-                        <label className="text-sm text-slate-500">Observed At (Date/Time)
+                        <label className="text-sm text-slate-500">{text.observedAt}
                             <input value={observedAt} onChange={(event) => setObservedAt(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-200 px-3 text-slate-900" />
                         </label>
                         <div>
-                            <p className="text-sm text-slate-500">Source</p>
+                            <p className="text-sm text-slate-500">{text.source}</p>
                             <div className="mt-1 flex gap-2">
-                                {["Patient", "Lab", "Device"].map((option) => (
-                                    <button type="button" key={option} onClick={() => setSource(option)} className={`h-10 rounded-lg border px-3 text-sm ${source === option ? "border-primary bg-blue-50 text-primary" : "border-slate-200"}`}>{option}</button>
+                                {(["Patient", "Lab", "Device"] as const).map((option) => (
+                                    <button type="button" key={option} onClick={() => setSource(option)} className={`h-10 rounded-lg border px-3 text-sm ${source === option ? "border-primary bg-blue-50 text-primary" : "border-slate-200"}`}>{tx(copy, option)}</button>
                                 ))}
                             </div>
                         </div>
-                        <label className="text-sm text-slate-500">Result Value
+                        <label className="text-sm text-slate-500">{text.result}
                             <input value={result} onChange={(event) => setResult(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-200 px-3 text-slate-900" />
                         </label>
                     </div>
                     <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-4">
-                        <p className="text-sm font-medium">Blood Pressure Dual Entry</p>
+                        <p className="text-sm font-medium">{text.bpDual}</p>
                         <div className="mt-2 flex items-center gap-2">
-                            <input value={systolic} onChange={(event) => setSystolic(event.target.value)} aria-label="Systolic" className="h-10 w-24 rounded-lg border border-slate-200 px-3" />
+                            <input value={systolic} onChange={(event) => setSystolic(event.target.value)} aria-label={text.systolic} className="h-10 w-24 rounded-lg border border-slate-200 px-3" />
                             <span>/</span>
-                            <input value={diastolic} onChange={(event) => setDiastolic(event.target.value)} aria-label="Diastolic" className="h-10 w-24 rounded-lg border border-slate-200 px-3" />
+                            <input value={diastolic} onChange={(event) => setDiastolic(event.target.value)} aria-label={text.diastolic} className="h-10 w-24 rounded-lg border border-slate-200 px-3" />
                             <span className="text-sm text-slate-400">mmHg</span>
                         </div>
                     </div>
                     <div className="mt-4 flex justify-end gap-3">
-                        <button type="button" onClick={reset} className="text-sm text-slate-500">Discard</button>
-                        <button type="button" onClick={record} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">{editingId ? "Update Observation" : "Record Observation"}</button>
+                        <button type="button" onClick={reset} className="text-sm text-slate-500">{text.discard}</button>
+                        <button type="button" onClick={record} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">{editingId ? text.update : text.record}</button>
                     </div>
                 </form>
                 <div className="space-y-4">
                     <section className="rounded-2xl bg-primary p-5 text-white">
-                        <p className="text-sm text-blue-100">Patient Status</p>
-                        <p className="text-xs text-blue-100">Last synced 2 minutes ago</p>
+                        <p className="text-sm text-blue-100">{text.patientStatus}</p>
+                        <p className="text-xs text-blue-100">{text.lastSynced}</p>
                         <p className="mt-3 text-4xl font-bold">{patient.lastGlucose}</p>
-                        <p className="mt-2 text-sm text-blue-100">Stable Glycemic Control</p>
+                        <p className="mt-2 text-sm text-blue-100">{text.stable}</p>
                     </section>
                     <section className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-                        <p className="font-semibold text-slate-800">Clinical Context</p>
-                        <p className="mt-2">{patient.name.split(" ")[0]}&apos;s HbA1c target is 7.0%. Please ensure manual entries match CGM data for reporting accuracy.</p>
+                        <p className="font-semibold text-slate-800">{text.contextTitle}</p>
+                        <p className="mt-2">{fill(text.contextBody, { name: patient.name.split(" ")[0] })}</p>
                     </section>
                 </div>
             </div>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-semibold">Recent History Log</h2>
+                    <h2 className="font-semibold">{text.logTitle}</h2>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                        <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search entries..." className="h-10 rounded-lg border border-slate-200 pl-8 pr-3 text-sm outline-none" />
+                        <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={text.search} className="h-10 rounded-lg border border-slate-200 pl-8 pr-3 text-sm outline-none" />
                     </div>
                 </div>
                 <div className="mt-3 overflow-x-auto">
                     <table className="w-full min-w-[680px] text-left text-sm">
-                        <thead className="text-[11px] text-slate-400"><tr><th className="py-2 font-medium">KIND</th><th>OBSERVED TIME</th><th>VALUE</th><th>STATUS</th><th>SOURCE</th><th>ACTIONS</th></tr></thead>
+                        <thead className="text-[11px] text-slate-400"><tr><th className="py-2 font-medium">{text.kindCol}</th><th>{text.timeCol}</th><th>{text.valueCol}</th><th>{text.statusCol}</th><th>{text.sourceCol}</th><th>{text.actions}</th></tr></thead>
                         <tbody>
                             {rows.map((entry) => (
                                 <tr key={entry.id} className="border-t border-slate-100">
                                     <td className="py-3 font-medium">
                                         <span className="inline-flex items-center gap-2">
                                             {entry.kind === "Blood Pressure" ? <HeartPulse size={16} /> : entry.kind === "HbA1c" ? <TestTube size={16} /> : <Droplets size={16} />}
-                                            {entry.kind}
+                                            {tx(copy, entry.kind)}
                                         </span>
                                     </td>
-                                    <td>{entry.time}</td>
+                                    <td>{tx(copy, entry.time)}</td>
                                     <td className="font-semibold">{entry.value}</td>
-                                    <td><span className={`rounded-full px-2 py-1 text-xs font-semibold ${entry.tone}`}>{entry.status}</span></td>
-                                    <td className="text-slate-500">{entry.source}</td>
+                                    <td><span className={`rounded-full px-2 py-1 text-xs font-semibold ${entry.tone}`}>{tx(copy, entry.status)}</span></td>
+                                    <td className="text-slate-500">{tx(copy, entry.source)}</td>
                                     <td>
                                         <button
-                                            aria-label={`Edit ${entry.kind}`}
+                                            aria-label={fill(text.edit, { kind: tx(copy, entry.kind) })}
                                             onClick={() => {
                                                 setEditingId(entry.id);
                                                 setKind(entry.kind);
@@ -186,11 +190,11 @@ export default function ObservationEntry() {
                                     </td>
                                 </tr>
                             ))}
-                            {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No observations yet. Record the first measurement above.</td></tr>}
+                            {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">{text.empty}</td></tr>}
                         </tbody>
                     </table>
                 </div>
-                <button onClick={() => setShowOlder(true)} className="mt-3 w-full text-sm font-medium text-primary">Load 15 older entries ↓</button>
+                <button onClick={() => setShowOlder(true)} className="mt-3 w-full text-sm font-medium text-primary">{text.loadOlder}</button>
             </section>
         </div>
     );

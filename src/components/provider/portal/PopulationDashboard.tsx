@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { usePortalSearch } from "@/components/provider/portal/ProviderShell";
+import { useLanguage } from "@/components/i18n/LanguageContext";
+import { matchesQuery, portalCopy, tx } from "@/lib/i18n/portalCopy";
 
 const bars = [
     { label: "< 7.0", height: 130, color: "bg-emerald-300" },
@@ -29,79 +31,81 @@ const queue = [
 
 export default function PopulationDashboard() {
     const { query } = usePortalSearch();
-    const [range, setRange] = useState("Last 30 Days");
+    const { locale } = useLanguage();
+    const copy = portalCopy[locale];
+    const text = copy.dashboard;
+    const [range, setRange] = useState("30");
     const [showTasks, setShowTasks] = useState(false);
     const [showSchedule, setShowSchedule] = useState(false);
 
-    const needle = query.trim().toLowerCase();
-    const visibleQueue = queue.filter((visit) => !needle || `${visit.name} ${visit.visit}`.toLowerCase().includes(needle));
+    const visibleQueue = queue.filter((visit) => matchesQuery(copy, query, [visit.name, visit.visit, visit.status]));
     const visibleActions = showTasks ? actions : actions.slice(0, 3);
 
     return (
         <div className="mx-auto max-w-6xl space-y-5">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <p className="text-[11px] font-semibold tracking-[0.16em] text-primary">DOCTOR PORTAL</p>
-                    <h1 className="mt-1 text-3xl font-bold tracking-tight">Doctor Population Dashboard</h1>
-                    <p className="text-sm text-slate-500">Real-time clinical insights across 1,248 assigned patients.</p>
+                    <p className="text-[11px] font-semibold tracking-[0.16em] text-primary">{text.eyebrow}</p>
+                    <h1 className="mt-1 text-3xl font-bold tracking-tight">{text.title}</h1>
+                    <p className="text-sm text-slate-500">{text.subtitle}</p>
                 </div>
                 <div className="flex gap-2">
                     <button onClick={() => window.print()} className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium">
-                        <Download size={15} /> Export PDF
+                        <Download size={15} /> {text.exportPdf}
                     </button>
                 </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-                <Stat label="TOTAL PATIENTS" value="1,248" extra="+2.4%" extraClass="text-emerald-600" />
-                <Stat label="HIGH RISK (HBA1C > 9)" value="142" extra="-12%" extraClass="text-red-500" />
-                <Stat label="ACTIVE CGM SYNCS" value="154" extra="patients" extraClass="text-slate-400" />
+                <Stat label={text.totalPatients} value="1,248" extra="+2.4%" extraClass="text-emerald-600" />
+                <Stat label={text.highRisk} value="142" extra="-12%" extraClass="text-red-500" />
+                <Stat label={text.activeCgm} value="154" extra={text.patients} extraClass="text-slate-400" />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="flex items-start justify-between gap-3">
                         <div>
-                            <h2 className="font-semibold">HbA1c Distribution</h2>
-                            <p className="text-sm text-slate-500">Percentage of population within specific glycemic ranges.</p>
+                            <h2 className="font-semibold">{text.hba1cTitle}</h2>
+                            <p className="text-sm text-slate-500">{text.hba1cBody}</p>
                         </div>
                         <select value={range} onChange={(event) => setRange(event.target.value)} className="rounded-lg bg-slate-100 px-2 py-1 text-xs">
-                            <option>Last 30 Days</option>
-                            <option>Last 90 Days</option>
-                            <option>Last Year</option>
+                            <option value="30">{text.range30}</option>
+                            <option value="90">{text.range90}</option>
+                            <option value="year">{text.rangeYear}</option>
                         </select>
                     </div>
                     <div className="mt-8 flex h-44 items-end gap-6 px-4">
                         {bars.map((bar) => (
                             <div key={bar.label} className="flex flex-1 flex-col items-center gap-2">
-                                <div className={`w-full max-w-[72px] rounded-t-lg ${bar.color}`} style={{ height: range === "Last Year" ? bar.height * 0.8 : bar.height }} />
+                                <div className={`w-full max-w-[72px] rounded-t-lg ${bar.color}`} style={{ height: range === "year" ? bar.height * 0.8 : bar.height }} />
                                 <span className="text-xs text-slate-500">{bar.label}</span>
                             </div>
                         ))}
                     </div>
                     <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs text-slate-500">
-                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-400" /> In Range</span>
-                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-400" /> Moderate Risk</span>
-                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" /> High Risk</span>
+                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-400" /> {text.inRange}</span>
+                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-400" /> {text.moderate}</span>
+                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" /> {text.highRiskLegend}</span>
                     </div>
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <h2 className="font-semibold">Priority Actions</h2>
-                    <p className="text-sm text-slate-500">Immediate tasks requiring clinical attention.</p>
+                    <h2 className="font-semibold">{text.actionsTitle}</h2>
+                    <p className="text-sm text-slate-500">{text.actionsBody}</p>
                     <div className="mt-4 space-y-3">
                         {visibleActions.map((action) => (
                             <article key={action.title} className={`rounded-xl border border-slate-200 border-l-4 ${action.tone} p-3`}>
                                 <div className="flex justify-between text-[10px] font-semibold tracking-wide text-slate-400">
-                                    <span>{action.tag}</span><span>{action.when}</span>
+                                    <span>{tx(copy, action.tag)}</span><span>{tx(copy, action.when)}</span>
                                 </div>
-                                <p className="mt-1 text-sm font-semibold">{action.title}</p>
-                                <p className="text-xs text-slate-500">{action.detail}</p>
+                                <p className="mt-1 text-sm font-semibold">{tx(copy, action.title)}</p>
+                                <p className="text-xs text-slate-500">{tx(copy, action.detail)}</p>
                             </article>
                         ))}
                     </div>
                     <button onClick={() => setShowTasks((value) => !value)} className="mt-4 h-10 w-full rounded-lg border border-slate-200 text-sm font-medium">
-                        {showTasks ? "Show fewer tasks" : "View All Tasks (14)"}
+                        {showTasks ? text.fewerTasks : text.allTasks}
                     </button>
                 </section>
             </div>
@@ -109,23 +113,23 @@ export default function PopulationDashboard() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h2 className="font-semibold">Today&apos;s Patient Queue</h2>
-                            <p className="text-sm text-slate-500">Live monitoring check-ins · 12 visits today</p>
+                            <h2 className="font-semibold">{text.queueTitle}</h2>
+                            <p className="text-sm text-slate-500">{text.queueBody}</p>
                         </div>
-                        <button onClick={() => setShowSchedule(true)} className="text-sm font-medium text-primary">View Calendar</button>
+                        <button onClick={() => setShowSchedule(true)} className="text-sm font-medium text-primary">{text.viewCalendar}</button>
                     </div>
                     <div className="mt-3 divide-y divide-slate-100">
                         {(showSchedule ? visibleQueue : visibleQueue.slice(0, 4)).map((visit) => (
                             <Link key={visit.id} href={`/provider/patients/${visit.id}`} className="flex items-center gap-3 py-3 text-sm">
                                 <span className="w-12 text-slate-500">{visit.time}</span>
-                                <span className="min-w-0 flex-1"><span className="block font-semibold">{visit.name}</span><span className="text-xs text-slate-400">{visit.visit}</span></span>
-                                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${visit.tone}`}>{visit.status}</span>
-                                <span className="text-right text-xs"><span className="block font-semibold">{visit.glucose}</span><span className="text-slate-400">{visit.note}</span></span>
+                                <span className="min-w-0 flex-1"><span className="block font-semibold">{visit.name}</span><span className="text-xs text-slate-400">{tx(copy, visit.visit)}</span></span>
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${visit.tone}`}>{tx(copy, visit.status)}</span>
+                                <span className="text-right text-xs"><span className="block font-semibold">{visit.glucose}</span><span className="text-slate-400">{tx(copy, visit.note)}</span></span>
                             </Link>
                         ))}
                     </div>
                     <button onClick={() => setShowSchedule((value) => !value)} className="mt-2 text-sm font-medium text-primary">
-                        {showSchedule ? "Show current queue" : "Full schedule →"}
+                        {showSchedule ? text.currentQueue : text.fullSchedule}
                     </button>
                 </section>
         </div>
