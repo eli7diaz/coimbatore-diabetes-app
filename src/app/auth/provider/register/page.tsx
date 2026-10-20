@@ -118,7 +118,7 @@ export default function ProviderRegisterPage() {
             </form>
 
             <p className="mt-8 text-center text-sm font-medium text-muted-foreground">
-                Returning doctor? <Link href="/auth/login" className="text-primary font-bold hover:underline">Sign In</Link>
+                Returning doctor? <Link href="/auth/provider/login" className="text-primary font-bold hover:underline">Sign In</Link>
             </p>
         </div>
     );
