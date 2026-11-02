@@ -149,11 +149,15 @@ export default function Dashboard() {
         else if (source === "watch") deviceName = "Apple Watch S9";
         else if (source === "fitbit") deviceName = "Fitbit Charge 6";
 
-        await AppDatabase.saveVital({
-            metricType: metric,
-            value,
-            sourceDevice: deviceName,
-        });
+        try {
+            await AppDatabase.saveVital({
+                metricType: metric,
+                value,
+                sourceDevice: deviceName,
+            });
+        } catch {
+            return;
+        }
 
         setVitals((prev) => ({
             ...prev,

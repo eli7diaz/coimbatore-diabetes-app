@@ -59,11 +59,34 @@ export interface InsulinLog {
   dose: number;
 }
 
+const VITAL_LIMITS: Record<VitalReading["metricType"], [number, number]> = {
+  glucose: [20, 600],
+  heartRate: [20, 250],
+  activeBurn: [1, 5000],
+  sleep: [0.1, 24],
+};
+
+function requireFinite(value: number, label: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} must be a real number.`);
+  }
+  return value;
+}
+
 export class AppDatabase {
   // --- Vitals API ---
   public static async saveVital(reading: Omit<VitalReading, "id" | "timestamp">): Promise<VitalReading> {
+    const limits = VITAL_LIMITS[reading.metricType];
+    const value = requireFinite(reading.value, "Reading");
+    if (!limits || value < limits[0] || value > limits[1]) {
+      throw new Error("That reading is outside the accepted range.");
+    }
+    const sourceDevice = reading.sourceDevice.trim().slice(0, 80);
+    if (!sourceDevice) {
+      throw new Error("A device name is required.");
+    }
     const timestamp = Date.now();
-    const data = { ...reading, timestamp };
+    const data = { metricType: reading.metricType, value, sourceDevice, timestamp };
     const docRef = await addDoc(collection(db, "vitals"), data);
     return {
       id: docRef.id,
@@ -110,8 +133,15 @@ export class AppDatabase {
 
   // --- Meals API ---
   public static async saveMealLog(meal: Omit<MealLog, "id" | "timestamp">): Promise<MealLog> {
+    const food = meal.food.trim().slice(0, 500);
+    const carbs = requireFinite(meal.carbs, "Carbs");
+    const calories = requireFinite(meal.calories, "Calories");
+    if (!food || carbs < 0 || carbs > 2000 || calories < 0 || calories > 10000) {
+      throw new Error("That meal could not be saved.");
+    }
     const timestamp = Date.now();
-    const data = { ...meal, timestamp };
+    // The photo stays on this device. The shared log keeps the text summary only.
+    const data = { food, carbs, calories, image: null, timestamp };
     const docRef = await addDoc(collection(db, "meals"), data);
     return {
       id: docRef.id,
@@ -131,8 +161,13 @@ export class AppDatabase {
 
   // --- Insulin API ---
   public static async saveInsulinLog(log: Omit<InsulinLog, "id" | "timestamp">): Promise<InsulinLog> {
+    const carbs = requireFinite(log.carbs, "Carbs");
+    const dose = requireFinite(log.dose, "Dose");
+    if (carbs < 0 || carbs > 1000 || dose < 0 || dose > 60) {
+      throw new Error("That insulin dose is outside the accepted range.");
+    }
     const timestamp = Date.now();
-    const data = { ...log, timestamp };
+    const data = { carbs, dose, timestamp };
     const docRef = await addDoc(collection(db, "insulin"), data);
     return {
       id: docRef.id,

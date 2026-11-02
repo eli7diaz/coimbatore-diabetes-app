@@ -43,7 +43,9 @@ export default function ProviderShell({ children }: { children: React.ReactNode 
     const [emergency, setEmergency] = useState(false);
 
     useEffect(() => {
-        if (!localStorage.getItem("auth")) {
+        // A patient session also sets "auth". The clinical pages stay closed
+        // unless this browser session was signed in as a provider.
+        if (localStorage.getItem("auth") !== "true" || localStorage.getItem("role") !== "provider") {
             router.replace("/auth/provider/login");
             return;
         }

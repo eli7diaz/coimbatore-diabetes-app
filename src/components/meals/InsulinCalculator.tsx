@@ -20,13 +20,19 @@ export default function InsulinCalculator({ carbs, onClose }: InsulinCalculatorP
     const [recorded, setRecorded] = useState(false);
 
     useEffect(() => {
-        const carbDose = carbs / carbRatio;
-        const correctionDose = Math.max(0, (glucose - target) / sensitivity);
-        const total = (carbDose + correctionDose).toFixed(1);
-        setBolus(parseFloat(total));
+        const ratio = carbRatio > 0 ? carbRatio : 1;
+        const isf = sensitivity > 0 ? sensitivity : 1;
+        const glucoseReading = Math.min(600, Math.max(20, glucose));
+        const carbDose = Math.max(0, carbs) / ratio;
+        const correctionDose = Math.max(0, (glucoseReading - target) / isf);
+        const total = carbDose + correctionDose;
+        setBolus(Number.isFinite(total) ? parseFloat(total.toFixed(1)) : 0);
     }, [carbs, glucose, target, carbRatio, sensitivity]);
 
+    const doseAllowed = Number.isFinite(bolus) && bolus >= 0 && bolus <= 60 && carbs >= 0 && carbs <= 1000;
+
     const handleRecord = async () => {
+        if (!doseAllowed) return;
         await AppDatabase.saveInsulinLog({
             carbs,
             dose: bolus,
@@ -111,7 +117,7 @@ export default function InsulinCalculator({ carbs, onClose }: InsulinCalculatorP
 
             <button
                 onClick={handleRecord}
-                disabled={recorded}
+                disabled={recorded || !doseAllowed}
                 className={`w-full mt-6 py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${recorded ? 'bg-green-500 text-white' : 'bg-gray-900 text-white hover:scale-[1.02] active:scale-[0.98]'
                     }`}
             >

@@ -22,6 +22,7 @@ export default function RegisterPage() {
         setLoading(true);
         setTimeout(() => {
             localStorage.setItem("auth", "true");
+            localStorage.setItem("role", "patient");
             window.dispatchEvent(new Event("auth-change"));
             router.push("/");
         }, 2000);

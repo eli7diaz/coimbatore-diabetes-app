@@ -16,6 +16,7 @@ export default function LoginPage() {
         // Simulate auth verification, then grant access only once it "completes"
         setTimeout(() => {
             localStorage.setItem("auth", "true");
+            localStorage.setItem("role", "patient");
             window.dispatchEvent(new Event("auth-change"));
             router.push("/");
         }, 1500);
@@ -26,6 +27,7 @@ export default function LoginPage() {
         // Simulate biometric scan delay
         setTimeout(() => {
             localStorage.setItem("auth", "true");
+            localStorage.setItem("role", "patient");
             window.dispatchEvent(new Event("auth-change"));
             router.push("/");
         }, 2000);

@@ -44,6 +44,17 @@ export default function LogReadingForm({ connectedDevices, onLogReading }: LogRe
             setError(t("dashboard.errorPositive"));
             return;
         }
+        const limits: Record<typeof metric, [number, number]> = {
+            glucose: [20, 600],
+            heartRate: [20, 250],
+            activeBurn: [1, 5000],
+            sleep: [0.1, 24],
+        };
+        const [min, max] = limits[metric];
+        if (numVal < min || numVal > max) {
+            setError(t("dashboard.readingOutOfRange"));
+            return;
+        }
 
         setLoading(true);
 
